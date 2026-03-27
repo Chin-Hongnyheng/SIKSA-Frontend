@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
+import 'app_gradient.dart';
 
 class AppTheme {
   static ThemeData lightTheme = ThemeData(
-    useMaterial3: true, // Modern Material 3 widgets
-    fontFamily: 'Nunito', // Set global font
+    useMaterial3: true,
+    fontFamily: 'Nunito',
 
     // Base colors
     primaryColor: AppColors.primary,
@@ -21,55 +22,64 @@ class AppTheme {
       error: AppColors.error,
       onError: Colors.white,
       surface: Colors.white,
-      onSurface: AppColors.textPrimary,
+      onSurface: AppColors.darkText,
     ),
 
-    // Text theme using your AppTextStyles
-    textTheme: const TextTheme(
-      headlineLarge: AppTextStyles.headlineLarge,
-      headlineMedium: AppTextStyles.headlineMedium,
-      bodyMedium: AppTextStyles.body,
-      bodySmall: AppTextStyles.caption,
-    ),
+    // Text theme
+    // textTheme: const TextTheme(
+    //   headlineLarge: AppTextStyles.headlineLarge,
+    //   headlineMedium: AppTextStyles.headlineMedium,
+    //   bodyMedium: AppTextStyles.body,
+    //   bodySmall: AppTextStyles.caption,
+    // ),
 
-    // AppBar theme
-    appBarTheme: const AppBarTheme(
-      backgroundColor: AppColors.primary,
-      foregroundColor: Colors.white,
-      elevation: 0,
-      centerTitle: true,
-    ),
+    // // AppBar theme
+    // appBarTheme: const AppBarTheme(
+    //   backgroundColor: AppColors.primary,
+    //   foregroundColor: Colors.white,
+    //   elevation: 0,
+    //   centerTitle: true,
+    // ),
 
-    // Elevated button theme (fallback for non-gradient buttons)
-    elevatedButtonTheme: ElevatedButtonThemeData(
-      style: ElevatedButton.styleFrom(
-        backgroundColor: AppColors.primary,
-        foregroundColor: Colors.white,
-        textStyle: AppTextStyles.button,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
-        ),
-      ),
-    ),
-
-    // Input fields
-    inputDecorationTheme: InputDecorationTheme(
-      filled: true,
-      fillColor: Colors.white,
-      hintStyle: const TextStyle(color: AppColors.textSecondary),
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.secondary),
-      ),
-      enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.secondary),
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: AppColors.primary, width: 2),
-      ),
-    ),
+    // // Elevated button theme
+    // elevatedButtonTheme: ElevatedButtonThemeData(
+    //   style: ElevatedButton.styleFrom(
+    //     foregroundColor: Colors.white,
+    //     textStyle: AppTextStyles.button,
+    //     shape: RoundedRectangleBorder(
+    //       borderRadius: BorderRadius.circular(12),
+    //     ),
+    //     padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 24),
+    //   ),
+    // ),
   );
+
+  // /// Example method to create a gradient button
+  // static Widget gradientButton({
+  //   required String text,
+  //   required VoidCallback onPressed,
+  //   double borderRadius = 12,
+  // }) {
+  //   return Container(
+  //     decoration: BoxDecoration(
+  //       gradient: AppGradients.button,
+  //       borderRadius: BorderRadius.circular(borderRadius),
+  //     ),
+  //     child: Material(
+  //       color: Colors.transparent,
+  //       child: InkWell(
+  //         borderRadius: BorderRadius.circular(borderRadius),
+  //         onTap: onPressed,
+  //         child: Container(
+  //           alignment: Alignment.center,
+  //           padding: const EdgeInsets.symmetric(vertical: 16),
+  //           child: Text(
+  //             text,
+  //             style: AppTextStyles.button,
+  //           ),
+  //         ),
+  //       ),
+  //     ),
+  //   );
+  // }
 }

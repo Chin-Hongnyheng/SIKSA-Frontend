@@ -28,8 +28,9 @@ class AppTextStyles {
 
   // Buttons
   static const button = TextStyle(
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: FontWeight.bold,
     color: Colors.white,
+    fontFamily: 'Poppins',
   );
 }
