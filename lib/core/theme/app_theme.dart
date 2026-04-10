@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 import 'app_text_styles.dart';
 import 'app_gradient.dart';
@@ -6,7 +7,7 @@ import 'app_gradient.dart';
 class AppTheme {
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    fontFamily: 'Nunito',
+    textTheme: GoogleFonts.nunitoTextTheme(),
 
     // Base colors
     primaryColor: AppColors.primary,
