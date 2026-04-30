@@ -1,26 +1,32 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../providers/auth_provider.dart';
 
 class GraphQLService {
   late GraphQLClient client;
 
   String? accessToken;
+  String? refreshToken;
 
   GraphQLService() {
-    final HttpLink httpLink = HttpLink("http://172.18.18.217:3000/graphql");
+    final HttpLink httpLink = HttpLink(dotenv.env['GRAPHQL_URL']!);
     client = GraphQLClient(link: httpLink, cache: GraphQLCache());
   }
 
-  Future<void> register({
+  Future<String> register({
     required String userName,
     required String email,
     required String phone,
     required String password,
     required String confirm,
+    required String role,
   }) async {
     const String mutation = """
       mutation Register(\$input: CreateRegisterInput!) {
         register(input: \$input) {
           message
+          accessToken
+          refreshToken
         }
       }
     """;
@@ -35,6 +41,7 @@ class GraphQLService {
             "phone": int.parse(phone),
             "password": password,
             "confirmPassword": confirm,
+            "role": role,
           },
         },
       ),
@@ -43,6 +50,11 @@ class GraphQLService {
     if (result.hasException) {
       throw Exception(result.exception.toString());
     }
+
+    AuthProvider.accessToken = result.data!['register']['accessToken'];
+    AuthProvider.refreshToken = result.data!['register']['refreshToken'];
+
+    return AuthProvider.accessToken!;
   }
 
   Future<String> login({
@@ -71,15 +83,15 @@ class GraphQLService {
       throw Exception(result.exception.toString());
     }
 
-    accessToken = result.data!['login']['accessToken'];
+    AuthProvider.accessToken = result.data!['login']['accessToken'];
 
-    return accessToken!;
+    return AuthProvider.accessToken!;
   }
 
   Future<Map<String, dynamic>> me() async {
     final Link authLink = HttpLink(
-      "http://192.168.1.2:3000/graphql",
-      defaultHeaders: {"Authorization": "Bearer $accessToken"},
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
     final GraphQLClient authClient = GraphQLClient(
@@ -106,5 +118,79 @@ class GraphQLService {
     }
 
     return result.data!['me'];
+  }
+
+  Future<void> forget({
+    required String email,
+    required String newPassword,
+    required String confirm,
+  }) async {
+    const String mutation = """
+      mutation Register(\$input: CreateForgetInput!){
+        forgetPassword(input: \$input){
+        message
+        }
+      }
+  """;
+
+    final result = await client.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {
+            "email": email,
+            "newPassword": newPassword,
+            "confirmPassword": confirm,
+          },
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      final exception = result.exception;
+
+      final message = (exception?.graphqlErrors.isNotEmpty == true)
+          ? exception!.graphqlErrors.first.message
+          : exception.toString();
+      throw message;
+    }
+  }
+
+  Future<void> validate({
+    required String userName,
+    required String email,
+    required String phone,
+    required String password,
+    required String confirm,
+  }) async {
+    const String mutation = """
+    mutation Validate(\$input: CreateRegisterInput!) {
+      validateRegister(input: \$input)
+    }
+  """;
+
+    final result = await client.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {
+            "userName": userName,
+            "email": email,
+            "phone": int.parse(phone),
+            "password": password,
+            "confirmPassword": confirm,
+          },
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      final exception = result.exception;
+
+      final message = (exception?.graphqlErrors.isNotEmpty == true)
+          ? exception!.graphqlErrors.first.message
+          : exception.toString();
+      throw message;
+    }
   }
 }

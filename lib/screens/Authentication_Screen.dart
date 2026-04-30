@@ -12,6 +12,9 @@ import '../graphql/graphql_service.dart';
 import '../graphql/api_service.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/loading.dart';
+import '../widgets/center_toast.dart';
+import '../widgets/roles.dart';
+import '../screens/Profile_Screen.dart';
 
 class AuthenticationScreen extends StatefulWidget {
   const AuthenticationScreen({super.key});
@@ -21,7 +24,7 @@ class AuthenticationScreen extends StatefulWidget {
 }
 
 class _AuthenticationScreenState extends State<AuthenticationScreen> {
-  bool isSignUp = true; // true = Sign Up, false = Login
+  bool isSignUp = true;
 
   final usernameController = TextEditingController();
   final emailController = TextEditingController();
@@ -29,9 +32,12 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
   final passwordController = TextEditingController();
   final confirmController = TextEditingController();
   final newPasswordController = TextEditingController();
-  final reenterPasswordController = TextEditingController();
+  final confirmPasswordController = TextEditingController();
+  final forgetEmailController = TextEditingController();
 
   final GraphQLService graphqlService = GraphQLService();
+
+  String selectedRole = "student";
 
   Future<void> handleLogin() async {
     final email = emailController.text.trim();
@@ -46,38 +52,183 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
     try {
       LoadingOverlay.show(context);
-
       await ApiService.sendOtp(email);
 
       if (!context.mounted) return;
 
       showModalBottomSheet(
+        // ignore: use_build_context_synchronously
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
         isDismissible: false,
-        builder: (context) => OtpModal(
+        constraints: const BoxConstraints(maxHeight: double.infinity),
+        builder: (bottomSheetContext) => OtpModal(
           email: email,
           onVerify: () async {
             try {
-              await graphqlService.login(email: email, password: password);
+              final token = await graphqlService.login(
+                email: email,
+                password: password,
+              );
+
               if (!mounted) return;
-              context.go("/home");
-            } catch (e) {
-              ScaffoldMessenger.of(
+
+              await CenterToast.show(
                 context,
-              ).showSnackBar(SnackBar(content: Text("Login failed: $e")));
+                message: "Login successful",
+                icon: Icons.check_circle,
+                color: Colors.green,
+              );
+              if (!mounted) return;
+              // context.go("/home", extra: token);
+              context.go("/profile");
+            } catch (e) {
+              await CenterToast.show(
+                context,
+                message: "Login failed: $e",
+                icon: Icons.error,
+                color: Colors.red,
+              );
             }
           },
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
+      await CenterToast.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+        message: e.toString(),
+        icon: Icons.error,
+        color: Colors.red,
+      );
     } finally {
       LoadingOverlay.hide();
     }
+  }
+
+  Future<void> handleForgotPassword() async {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      isDismissible: false,
+      constraints: const BoxConstraints(maxWidth: double.infinity),
+      builder: (context) => EmailModal(
+        emailController: forgetEmailController,
+        onContinue: () async {
+          final email = forgetEmailController.text.trim();
+
+          if (email.isEmpty) {
+            await CenterToast.show(
+              context,
+              message: "Email is required",
+              icon: Icons.error,
+              color: Colors.red,
+            );
+            return;
+          }
+
+          try {
+            LoadingOverlay.show(context);
+
+            /// send OTP
+            await ApiService.sendOtp(email);
+
+            if (!mounted) return;
+
+            showModalBottomSheet(
+              context: context,
+              isScrollControlled: true,
+              backgroundColor: Colors.transparent,
+              isDismissible: false,
+              constraints: const BoxConstraints(maxWidth: double.infinity),
+              builder: (context) => OtpModal(
+                email: email,
+                onVerify: () {
+                  /// PASSWORD MODAL (FULL WIDTH)
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    backgroundColor: Colors.transparent,
+                    isDismissible: false,
+                    constraints: const BoxConstraints(
+                      maxWidth: double.infinity,
+                    ),
+                    builder: (context) => PasswordModal(
+                      newPasswordController: newPasswordController,
+                      confirmPasswordController: confirmPasswordController,
+                      onSubmit: () async {
+                        final newPassword = newPasswordController.text.trim();
+                        final confirmPassword = confirmPasswordController.text
+                            .trim();
+
+                        if (newPassword.isEmpty || confirmPassword.isEmpty) {
+                          await CenterToast.show(
+                            context,
+                            message: "Password cannot be empty",
+                            icon: Icons.error,
+                            color: Colors.red,
+                          );
+                          return;
+                        }
+
+                        if (newPassword != confirmPassword) {
+                          await CenterToast.show(
+                            context,
+                            message: "Password do not match",
+                            icon: Icons.error,
+                            color: Colors.red,
+                          );
+                          return;
+                        }
+
+                        try {
+                          LoadingOverlay.show(context);
+
+                          await graphqlService.forget(
+                            email: email,
+                            newPassword: newPassword,
+                            confirm: confirmPassword,
+                          );
+
+                          Navigator.pop(context); // close password modal
+                          Navigator.pop(context); // close OTP modal
+
+                          await CenterToast.show(
+                            context,
+                            message: "Password updated successfully",
+                            icon: Icons.check_circle,
+                            color: Colors.green,
+                          );
+                        } catch (e) {
+                          await CenterToast.show(
+                            context,
+                            message: e.toString(),
+                            icon: Icons.error,
+                            color: Colors.red,
+                          );
+                        } finally {
+                          LoadingOverlay.hide();
+                        }
+                      },
+                    ),
+                  );
+                },
+              ),
+            );
+          } catch (e) {
+            await CenterToast.show(
+              context,
+              message: e.toString(),
+              icon: Icons.error,
+              color: Colors.red,
+            );
+          } finally {
+            LoadingOverlay.hide();
+          }
+        },
+      ),
+    );
   }
 
   Future<void> handleRegister() async {
@@ -93,28 +244,43 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
         phone.isEmpty ||
         password.isEmpty ||
         confirm.isEmpty) {
-      ScaffoldMessenger.of(
+      await CenterToast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Please fill all fields")));
+        message: "Please fill all fields",
+        icon: Icons.error,
+        color: Colors.red,
+      );
       return;
     }
 
     if (password != confirm) {
-      ScaffoldMessenger.of(
+      await CenterToast.show(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Passwords do not match")));
+        message: "Password do not match",
+        icon: Icons.error,
+        color: Colors.red,
+      );
       return;
     }
 
     try {
       LoadingOverlay.show(context);
 
-      /// 1. SEND OTP
+      /// Validate first
+      await graphqlService.validate(
+        userName: username,
+        email: email,
+        phone: phone,
+        password: password,
+        confirm: confirm,
+      );
+
+      /// SEND OTP
       await ApiService.sendOtp(email);
 
       if (!context.mounted) return;
 
-      /// 2. SHOW OTP MODAL
+      /// SHOW OTP MODAL
       showModalBottomSheet(
         context: context,
         isScrollControlled: true,
@@ -125,28 +291,43 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
           email: email,
           onVerify: () async {
             try {
-              await graphqlService.register(
+              final token = await graphqlService.register(
                 userName: username,
                 email: email,
                 phone: phone,
                 password: password,
                 confirm: confirm,
+                role: selectedRole,
               );
               if (!mounted) return;
 
-              context.go("/home");
-            } catch (e) {
-              ScaffoldMessenger.of(
+              await CenterToast.show(
                 context,
-              ).showSnackBar(SnackBar(content: Text("Register failed: $e")));
+                message: "Register successful",
+                icon: Icons.check_circle,
+                color: Colors.green,
+              );
+              if (!mounted) return;
+              // context.go("/home", extra: token);
+              context.go("/profile");
+            } catch (e) {
+              await CenterToast.show(
+                context,
+                message: "Register failed: $e",
+                icon: Icons.error,
+                color: Colors.red,
+              );
             }
           },
         ),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
+      await CenterToast.show(
         context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+        message: e.toString(),
+        icon: Icons.error,
+        color: Colors.red,
+      );
     } finally {
       LoadingOverlay.hide();
     }
@@ -160,7 +341,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
     passwordController.dispose();
     confirmController.dispose();
     newPasswordController.dispose();
-    reenterPasswordController.dispose();
+    confirmPasswordController.dispose();
     super.dispose();
   }
 
@@ -237,6 +418,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                         onTap: () {
                           setState(() {
                             isSignUp = false;
+
                             emailController.clear();
                             passwordController.clear();
                           });
@@ -276,6 +458,16 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (isSignUp) ...[
+                      RoleSelector(
+                        selectedRole: selectedRole,
+                        onChanged: (userRole) {
+                          setState(() {
+                            selectedRole = userRole;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+
                       AppTextField(
                         controller: usernameController,
                         label: "Username",
@@ -415,80 +607,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                       Align(
                         alignment: Alignment.centerRight,
                         child: TextButton(
-                          onPressed: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => EmailModal(
-                                emailController: emailController,
-                                onContinue: () {
-                                  Navigator.pop(context);
-
-                                  showModalBottomSheet(
-                                    context: context,
-                                    isScrollControlled: true,
-                                    backgroundColor: Colors.transparent,
-                                    builder: (context) => OtpModal(
-                                      email: emailController.text,
-                                      onVerify: () {
-                                        Navigator.pop(context);
-                                        showModalBottomSheet(
-                                          context: context,
-                                          isScrollControlled: true,
-                                          backgroundColor: Colors.transparent,
-                                          builder: (context) => PasswordModal(
-                                            newPasswordController:
-                                                newPasswordController,
-                                            reenterPasswordController:
-                                                reenterPasswordController,
-                                            onSubmit: () {
-                                              final pass =
-                                                  newPasswordController.text;
-                                              final confirm =
-                                                  reenterPasswordController
-                                                      .text;
-
-                                              if (pass.isEmpty ||
-                                                  confirm.isEmpty) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      "Password cannot be empty",
-                                                    ),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-
-                                              if (pass != confirm) {
-                                                ScaffoldMessenger.of(
-                                                  context,
-                                                ).showSnackBar(
-                                                  const SnackBar(
-                                                    content: Text(
-                                                      "Passwords do not match",
-                                                    ),
-                                                  ),
-                                                );
-                                                return;
-                                              }
-
-                                              Navigator.pop(context);
-
-                                              print("Password updated: $pass");
-                                            },
-                                          ),
-                                        );
-                                      },
-                                    ),
-                                  );
-                                },
-                              ),
-                            );
-                          },
+                          onPressed: handleForgotPassword,
                           child: const Text("Forgot Password?"),
                         ),
                       ),

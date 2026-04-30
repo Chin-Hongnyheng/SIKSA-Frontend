@@ -4,12 +4,12 @@ import 'textfield.dart';
 
 class PasswordModal extends StatelessWidget {
   final TextEditingController newPasswordController;
-  final TextEditingController reenterPasswordController;
+  final TextEditingController confirmPasswordController;
   final VoidCallback onSubmit;
   const PasswordModal({
     super.key,
     required this.newPasswordController,
-    required this.reenterPasswordController,
+    required this.confirmPasswordController,
     required this.onSubmit,
   });
 
@@ -68,8 +68,8 @@ class PasswordModal extends StatelessWidget {
               const SizedBox(height: 20),
 
               AppTextField(
-                controller: reenterPasswordController,
-                label: "Re-Enter Password",
+                controller: confirmPasswordController,
+                label: "Confirm Password",
                 hint: "Enter your password",
                 secure: true,
                 showToggle: true,

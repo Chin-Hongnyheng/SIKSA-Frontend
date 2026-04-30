@@ -48,7 +48,7 @@ class EmailModal extends StatelessWidget {
               const SizedBox(height: 8),
 
               const Text(
-                "Enter your email for the verification process, we will send 4 digits code to your email.",
+                "Enter your email for the verification process, we will send 6 digits code to your email.",
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.grey, fontSize: 16),
               ),

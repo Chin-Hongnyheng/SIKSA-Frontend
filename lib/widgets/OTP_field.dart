@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
 import '../graphql/api_service.dart';
+import '../widgets/center_toast.dart';
 
 class OtpField extends StatefulWidget {
   final int length;
@@ -44,7 +45,12 @@ class _OtpFieldState extends State<OtpField> {
     final otp = _controller.text.trim();
 
     if (otp.isEmpty || otp.length != 6) {
-      _showError('Please enter all 6 digits');
+      await CenterToast.show(
+        context,
+        message: "Please enter all 6 digits",
+        icon: Icons.error,
+        color: Colors.red,
+      );
       return;
     }
 
@@ -58,20 +64,18 @@ class _OtpFieldState extends State<OtpField> {
 
       if (!mounted) return;
 
-      // SUCCESS
-      _showSuccess('✅ Registration successful');
-
-      await Future.delayed(const Duration(milliseconds: 800));
-
-      if (!mounted) return;
-
       widget.onVerifySuccess();
     } catch (e) {
       if (!mounted) return;
 
       // ERROR HANDLING
       final errorMessage = e.toString().replaceAll('Exception: ', '');
-      _showError(errorMessage);
+      await CenterToast.show(
+        context,
+        message: errorMessage,
+        icon: Icons.error,
+        color: Colors.red,
+      );
     } finally {
       if (mounted) {
         setState(() {
@@ -82,26 +86,26 @@ class _OtpFieldState extends State<OtpField> {
   }
 
   /// Show error snackbar
-  void _showError(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-        duration: const Duration(seconds: 3),
-      ),
-    );
-  }
+  // void _showError(String message) {
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     SnackBar(
+  //       content: Text(message),
+  //       backgroundColor: Colors.red,
+  //       duration: const Duration(seconds: 3),
+  //     ),
+  //   );
+  // }
 
   /// Show success snackbar
-  void _showSuccess(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.green,
-        duration: const Duration(seconds: 2),
-      ),
-    );
-  }
+  // void _showSuccess(String message) {
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     SnackBar(
+  //       content: Text(message),
+  //       backgroundColor: Colors.green,
+  //       duration: const Duration(seconds: 2),
+  //     ),
+  //   );
+  // }
 
   @override
   Widget build(BuildContext context) {

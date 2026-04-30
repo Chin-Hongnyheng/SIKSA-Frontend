@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'core/theme/app_theme.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'config/router.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 

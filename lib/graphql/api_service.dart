@@ -1,8 +1,9 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
-  static const String baseUrl = 'http://172.18.18.217:3000';
+  static final String baseUrl = dotenv.env['BASE_URL']!;
 
   /// Send OTP to email
   static Future<void> sendOtp(String email) async {

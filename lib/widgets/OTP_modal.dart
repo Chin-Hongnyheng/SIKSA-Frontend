@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/button.dart';
 import '../widgets/OTP_field.dart';
 import '../graphql/api_service.dart';
+import '../widgets/center_toast.dart';
 
 class OtpModal extends StatefulWidget {
   final String? email;
@@ -19,11 +20,11 @@ class _OtpModalState extends State<OtpModal> {
   /// Resend OTP using API Service
   Future<void> _resendOtp() async {
     if (widget.email == null || widget.email!.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Email not provided'),
-          backgroundColor: Colors.red,
-        ),
+      await CenterToast.show(
+        context,
+        message: "Email not provided",
+        icon: Icons.error,
+        color: Colors.red,
       );
       return;
     }
@@ -39,19 +40,31 @@ class _OtpModalState extends State<OtpModal> {
       if (!mounted) return;
 
       // SUCCESS
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('✅ OTP sent to your email'),
-          backgroundColor: Colors.green,
-        ),
+      await CenterToast.show(
+        context,
+        message: "OTP sent to your email",
+        icon: Icons.check_circle,
+        color: Colors.green,
+      );
+      await CenterToast.show(
+        context,
+        message: "Password cannot be empty",
+        icon: Icons.error,
+        color: Colors.red,
       );
     } catch (e) {
       if (!mounted) return;
 
       // ERROR HANDLING
       final errorMessage = e.toString().replaceAll('Exception: ', '');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('❌ $errorMessage'), backgroundColor: Colors.red),
+      // ScaffoldMessenger.of(context).showSnackBar(
+      //   SnackBar(content: Text('❌ $errorMessage'), backgroundColor: Colors.red),
+      // );
+      await CenterToast.show(
+        context,
+        message: errorMessage,
+        icon: Icons.error,
+        color: Colors.red,
       );
     } finally {
       if (mounted) {
