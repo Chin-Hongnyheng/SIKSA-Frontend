@@ -57,7 +57,6 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       if (!context.mounted) return;
 
       showModalBottomSheet(
-        // ignore: use_build_context_synchronously
         context: context,
         isScrollControlled: true,
         backgroundColor: Colors.transparent,
