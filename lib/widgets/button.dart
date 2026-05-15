@@ -45,20 +45,20 @@ class _AppButtonState extends State<AppButton> {
 
             child: Center(
               child: _isPressed
-                  // gradient text
+                  // pressed state (white background + gradient text)
                   ? ShaderMask(
                       shaderCallback: (bounds) {
                         return AppGradients.button.createShader(bounds);
                       },
-                      child: const Text(
-                        "SIGN UP",
-                        style: TextStyle(
+                      child: Text(
+                        widget.text, // ✅ FIXED: was "SIGN UP"
+                        style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          color: Colors.white,
+                          color: Colors.white, // masked by ShaderMask
                         ),
                       ),
                     )
-                  // default white text
+                  // normal state (gradient background + white text)
                   : Text(
                       widget.text,
                       style: const TextStyle(

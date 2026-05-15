@@ -1,6 +1,6 @@
 name: frontend
 description: "A new Flutter project."
-publish_to: 'none'
+publish_to: "none"
 
 version: 1.0.0+1
 
@@ -31,7 +31,6 @@ dependencies:
   go_router: ^14.0.0
   graphql_flutter: ^5.3.0
   flutter_dotenv: ^5.1.0
-  
 
 dev_dependencies:
   flutter_test:
