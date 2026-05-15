@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 import '../screens/Authentication_Screen.dart';
 import '../screens/Start_Screen.dart';
 import '../screens/Home_Screen.dart';
+import '../screens/student_dashboard.dart';
+import '../screens/notifications_screen.dart';
 
 final GoRouter router = GoRouter(
   initialLocation: '/',
@@ -12,5 +14,13 @@ final GoRouter router = GoRouter(
     GoRoute(path: '/auth', builder: (context, state) => AuthenticationScreen()),
     GoRoute(path: '/home', builder: (context, state) => HomeScreen()),
     GoRoute(path: '/profile', builder: (context, state) => ProfileScreen()),
+    GoRoute(
+      path: '/dashboard',
+      builder: (context, state) => StudentDashboard(),
+    ),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => NotificationsScreen(),
+    ),
   ],
 );

@@ -98,7 +98,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
           color: Colors.green,
         );
 
-        context.go('/profile');
+        context.go('/dashboard');
       }
     } catch (e) {
       LoadingOverlay.hide();
