@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/button.dart';
-import 'textfield.dart';
+import '../widgets/textfield.dart';
 
 class EmailModal extends StatelessWidget {
   final VoidCallback onContinue;

@@ -107,6 +107,12 @@ class GraphQLService {
         email
         phone
         role
+        dob
+        gender
+        address
+        photo_url
+        notification
+        language
       }
     }
   """;
@@ -192,5 +198,92 @@ class GraphQLService {
           : exception.toString();
       throw message;
     }
+  }
+
+  Future<void> validateLogin({
+    required String email,
+    required String password,
+  }) async {
+    const String mutation = """
+    mutation ValidateLogin(\$input: CreateLoginInput!) {
+      validateLogin(input: \$input)
+    }
+""";
+
+    final result = await client.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {"email": email, "password": password},
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      final exception = result.exception;
+
+      final message = (exception?.graphqlErrors.isNotEmpty == true)
+          ? exception!.graphqlErrors.first.message
+          : exception.toString();
+      throw message;
+    }
+  }
+
+  Future<Map<String, dynamic>> update({
+    required String userName,
+    required String dob,
+    required String gender,
+    required String address,
+    required String notification,
+    required String language,
+  }) async {
+    final Link authLink = HttpLink(
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+    final GraphQLClient client = GraphQLClient(
+      link: authLink,
+      cache: GraphQLCache(),
+    );
+    const String mutation = """
+  mutation UpdateProfile(\$input: UpdateUserInput!) {
+    updateProfile(input: \$input) {
+      message
+      user {
+        id
+        userName
+        email
+        phone
+        role
+        dob
+        gender
+        address
+        photo_url
+        notification
+        language
+      }
+    }
+  }
+  """;
+    final MutationOptions options = MutationOptions(
+      document: gql(mutation),
+      variables: {
+        "input": {
+          "userName": userName,
+          "dob": dob,
+          "gender": gender,
+          "address": address,
+          "notification": notification,
+          "language": language,
+        },
+      },
+    );
+    final result = await client.mutate(options);
+    if (result.hasException) {
+      throw Exception(result.exception.toString());
+    }
+    print('update result: ${result.data}');
+    print('update exception: ${result.exception}');
+    return result.data!['updateProfile'];
   }
 }

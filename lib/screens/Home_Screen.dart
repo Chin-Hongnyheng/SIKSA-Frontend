@@ -13,9 +13,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     final token = GoRouterState.of(context).extra as String?;
     return Scaffold(
-      body: Center(
-        child: Text(token ?? "No Token", textAlign: TextAlign.center),
-      ),
+      body: Center(child: Text("Hello ta hg Your token: $token")),
     );
   }
 }
