@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
+import 'core/theme/app_theme.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'config/router.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env");
   runApp(const MyApp());
 }
 
@@ -9,21 +14,9 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      home: Scaffold(
-        appBar: AppBar(
-          title: const Text('SIKSA APP'),
-          backgroundColor: Colors.green,
-          foregroundColor: Colors.white,
-        ),
-        body: const Center(
-          // The Text widget is used to display text on the screen.
-          child: Text(
-            'Hello, Welcome to SIKSA APP!',
-            style: TextStyle(fontSize: 24.0, fontWeight: FontWeight.bold, color: Colors.green),
-          ),
-        ),
-      ),
+    return MaterialApp.router(
+      theme: AppTheme.lightTheme,
+      routerConfig: router,
       debugShowCheckedModeBanner: false,
     );
   }
