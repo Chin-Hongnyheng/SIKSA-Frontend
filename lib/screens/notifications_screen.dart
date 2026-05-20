@@ -1,5 +1,6 @@
 // lib/screens/notifications_screen.dart
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../widgets/notification_card.dart';
 
 class NotificationsScreen extends StatelessWidget {
@@ -61,10 +62,13 @@ class NotificationsScreen extends StatelessWidget {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+                    icon: const Icon(
+                      Icons.arrow_back_ios_new,
+                      color: Colors.white,
+                    ),
                     onPressed: () {
                       // Navigate back
-                      Navigator.pop(context);
+                      context.pop(context);
                     },
                   ),
                   const Expanded(
@@ -120,12 +124,14 @@ class NotificationsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ...newNotifications.map((notif) => NotificationCard(
-                          title: notif['title'],
-                          message: notif['message'],
-                          time: notif['time'],
-                          isUnread: notif['isUnread'],
-                        )),
+                    ...newNotifications.map(
+                      (notif) => NotificationCard(
+                        title: notif['title'],
+                        message: notif['message'],
+                        time: notif['time'],
+                        isUnread: notif['isUnread'],
+                      ),
+                    ),
 
                     const SizedBox(height: 16),
 
@@ -139,13 +145,15 @@ class NotificationsScreen extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    ...earlierNotifications.map((notif) => NotificationCard(
-                          title: notif['title'],
-                          message: notif['message'],
-                          time: notif['time'],
-                          isUnread: notif['isUnread'],
-                        )),
-                        
+                    ...earlierNotifications.map(
+                      (notif) => NotificationCard(
+                        title: notif['title'],
+                        message: notif['message'],
+                        time: notif['time'],
+                        isUnread: notif['isUnread'],
+                      ),
+                    ),
+
                     const SizedBox(height: 24),
                   ],
                 ),

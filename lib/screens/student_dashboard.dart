@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import '../widgets/dashboard_header.dart';
 import '../widgets/stat_card.dart';
 
@@ -20,7 +21,8 @@ class StudentDashboard extends StatelessWidget {
               subtitle: 'Your class start today.',
               // avatarUrl: 'https://example.com/avatar.png',
               onBellPressed: () {
-                Navigator.pushNamed(context, '/notifications');
+                // Navigator.pushNamed(context, '/notifications');
+                context.push('/notifications');
               },
             ),
 
