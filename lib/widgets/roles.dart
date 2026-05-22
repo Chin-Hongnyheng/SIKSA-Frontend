@@ -86,8 +86,8 @@ class RoleSelector extends StatelessWidget {
 
         Row(
           children: [
-            _buildOption(title: "Student", value: "student"),
-            _buildOption(title: "Teacher", value: "teacher"),
+            _buildOption(title: "Student", value: "Student"),
+            _buildOption(title: "Teacher", value: "Teacher"),
           ],
         ),
       ],

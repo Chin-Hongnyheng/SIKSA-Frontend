@@ -21,13 +21,13 @@ class _StartScreenState extends State<StartScreen> {
     return Scaffold(
       body: Column(
         children: [
-          const SizedBox(height: 50),
+          const SizedBox(height: 130),
 
           /// LOGO
           const Center(child: LogoApp()),
 
           /// PAGE VIEW
-          Expanded(
+          Flexible(
             child: PageView(
               controller: _controller,
               children: [
@@ -62,7 +62,7 @@ class _StartScreenState extends State<StartScreen> {
             ),
           ),
 
-          const SizedBox(height: 50),
+          const SizedBox(height: 70),
 
           /// BUTTON
           AppButton(
@@ -119,9 +119,9 @@ class _StartScreenState extends State<StartScreen> {
 
   Widget _page(String asset, String title, String desc) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
+      padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
       child: Column(
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
           SizedBox(height: 300, child: Lottie.asset(asset)),
           Text(

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../graphql/graphql_service.dart';
-import '../providers/auth_provider.dart';
+import 'package:go_router/go_router.dart';
+import '../service/Authentication_service.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
 
@@ -12,6 +12,8 @@ import '../modals/gender_modal.dart';
 import '../modals/date_picker_modal.dart';
 import '../modals/notification_modal.dart';
 import '../modals/language_modal.dart';
+import '../providers/auth_provider.dart';
+import '../widgets/center_toast.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -40,6 +42,116 @@ class _ProfileScreenState extends State<ProfileScreen> {
     fetchUser();
   }
 
+  void _onLogoutTap() {
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (_) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 20,
+                  offset: Offset(0, 10),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.logout, color: Colors.red, size: 32),
+                const SizedBox(height: 12),
+                const Text(
+                  'Log Out',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Are you sure you want to log out?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    // Cancel
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => entry.remove(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    // ✅ Log Out
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          entry.remove();
+                          await _handleLogout();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Log Out',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlayState.insert(entry);
+  }
+
+  Future<void> _handleLogout() async {
+    await AuthProvider.clearTokens();
+    if (!mounted) return;
+    context.go('/start');
+  }
+
   Future<void> _pickImage() async {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
@@ -62,6 +174,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
     } catch (e) {
       if (!mounted) return;
+      if (e.toString().contains('SESSION_EXPIRED')) {
+        context.go('/start');
+        return;
+      }
       setState(() {
         error = e.toString();
         isLoading = false;
@@ -69,53 +185,42 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  /// Called by every modal on Save — updates local state then calls the API
   Future<void> _updateField(String key, String value) async {
-    // 1. Optimistic local update
+    final oldValue = user?[key];
+
     setState(() => user?[key] = value);
 
-    // 2. Build the full profile payload (all fields required by mutation)
-    await _submitProfile();
+    try {
+      await _submitProfile();
+    } catch (e) {
+      setState(() => user?[key] = oldValue);
+    }
   }
 
   Future<void> _submitProfile() async {
     if (user == null) return;
-
-    // 👇 add this
-    print('userName: ${user?['userName']}');
-    print('dob: ${user?['dob']}');
-    print('gender: ${user?['gender']}');
-    print('address: ${user?['address']}');
-    print('notification: ${user?['notification']}');
-    print('language: ${user?['language']}');
-
     try {
       await graphqlService.update(
         userName: user?['userName'] ?? '',
-        dob: user?['dob'] ?? '',
+        dob: (user?['dob'] != null && user!['dob'].toString().isNotEmpty)
+            ? user!['dob'].toString()
+            : null,
         gender: user?['gender'] ?? '',
         address: user?['address'] ?? '',
         notification: user?['notification'] ?? 'ON',
         language: user?['language'] ?? 'ENGLISH',
       );
     } catch (e) {
-      if (!mounted) return;
-      print('❌ updateProfile error: $e');
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Error'),
-          content: SelectableText(
-            e.toString(),
-          ), // 👈 SelectableText lets you copy it
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
+      if (mounted) {
+        CenterToast.show(
+          // ← replace showDialog with this
+          context,
+          message: e.toString(),
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+      }
+      rethrow; // ← add this so _updateField catches it
     }
   }
 
@@ -255,7 +360,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 20),
                   ProfileMoreCard(
                     user: user,
-                    onLogout: () {},
+                    onLogout: _onLogoutTap,
                     onNotificationTap: _onNotificationTap,
                     onLanguageTap: _onLanguageTap,
                   ),

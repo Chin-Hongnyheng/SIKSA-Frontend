@@ -74,18 +74,21 @@ class ProfileDetailCard extends StatelessWidget {
               label: 'Username',
               value: user?['userName'],
               fieldKey: 'userName',
+              isEditable: true,
             ),
             _buildField(
               icon: Icons.email,
               label: 'Email',
               value: user?['email'],
               fieldKey: 'email',
+              isEditable: false,
             ),
             _buildField(
               icon: Icons.phone,
               label: 'Phone',
               value: user?['phone'] != null ? '+${user!['phone']}' : null,
               fieldKey: 'phone',
+              isEditable: false,
             ),
             _buildField(
               icon: Icons.wc,
@@ -93,6 +96,7 @@ class ProfileDetailCard extends StatelessWidget {
               value: user?['gender'],
               fieldKey: 'gender',
               isGender: true,
+              isEditable: true,
             ),
             _buildField(
               icon: Icons.calendar_today,
@@ -100,12 +104,14 @@ class ProfileDetailCard extends StatelessWidget {
               value: user?['dob'],
               fieldKey: 'dob',
               isDateOfBirth: true,
+              isEditable: true,
             ),
             _buildField(
               icon: Icons.location_on,
               label: 'Address',
               value: user?['address'],
               fieldKey: 'address',
+              isEditable: true,
               isLastItem: true,
             ),
           ],
@@ -122,6 +128,7 @@ class ProfileDetailCard extends StatelessWidget {
     bool isGender = false,
     bool isDateOfBirth = false,
     bool isLastItem = false,
+    bool isEditable = true,
   }) {
     String displayValue = '';
     if (value != null && value.toString().isNotEmpty) {
@@ -134,12 +141,14 @@ class ProfileDetailCard extends StatelessWidget {
     return Column(
       children: [
         InkWell(
-          onTap: () => onFieldTap(
-            label,
-            fieldKey,
-            isGender: isGender,
-            isDateOfBirth: isDateOfBirth,
-          ),
+          onTap: isEditable
+              ? () => onFieldTap(
+                  label,
+                  fieldKey,
+                  isGender: isGender,
+                  isDateOfBirth: isDateOfBirth,
+                )
+              : null,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
             child: Row(
@@ -174,11 +183,12 @@ class ProfileDetailCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                Icon(
-                  isEmpty ? Icons.arrow_forward_ios : Icons.edit,
-                  color: const Color(0xFFBDBDBD),
-                  size: 16,
-                ),
+                if (isEditable)
+                  Icon(
+                    isEmpty ? Icons.arrow_forward_ios : Icons.edit,
+                    color: const Color(0xFFBDBDBD),
+                    size: 16,
+                  ),
               ],
             ),
           ),
