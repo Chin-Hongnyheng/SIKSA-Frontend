@@ -1,3 +1,5 @@
+// ignore_for_file: avoid_print
+
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../providers/auth_provider.dart';

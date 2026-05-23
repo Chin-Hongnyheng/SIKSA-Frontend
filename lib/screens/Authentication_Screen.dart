@@ -36,7 +36,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
   final GraphQLService graphqlService = GraphQLService();
 
-  String selectedRole = "student";
+  String selectedRole = "Student";
 
   Future<void> handleLogin() async {
     final email = emailController.text.trim();
@@ -47,7 +47,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
         context,
         message: "Please fill all fields",
         icon: Icons.error,
-        color: Colors.red,
+        color: const Color.fromARGB(255, 68, 62, 62),
       );
       return;
     }

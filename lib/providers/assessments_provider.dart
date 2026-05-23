@@ -6,22 +6,28 @@ class AssessmentsState {
   final bool isLoading;
   final List<Map<String, dynamic>> assessments;
   final String? role;
+  final String? errorMessage;
 
   const AssessmentsState({
     this.isLoading = false,
     this.assessments = const [],
     this.role,
+    this.errorMessage,
   });
 
   AssessmentsState copyWith({
     bool? isLoading,
     List<Map<String, dynamic>>? assessments,
     String? role,
+    String? errorMessage,
+    bool clearError = false,
+    bool clearRole = false,
   }) {
     return AssessmentsState(
       isLoading: isLoading ?? this.isLoading,
       assessments: assessments ?? this.assessments,
-      role: role ?? this.role,
+      role: clearRole ? null : (role ?? this.role),
+      errorMessage: clearError ? null : (errorMessage ?? this.errorMessage),
     );
   }
 }
@@ -38,20 +44,47 @@ class AssessmentsNotifier extends Notifier<AssessmentsState> {
   }
 
   Future<void> fetchData({bool silent = false}) async {
-    state = state.copyWith(isLoading: true);
+    state = state.copyWith(isLoading: true, clearError: true);
     String? role;
     try {
       final user = await _graphqlService.me();
       role = user['role'] as String?;
-    } catch (_) {
-      role = null;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        clearRole: true,
+        errorMessage: e.toString(),
+      );
+      if (!silent) rethrow;
+      return;
+    }
+
+    final canManage = role == 'Teacher' || role == 'Admin';
+    if (!canManage) {
+      state = state.copyWith(
+        isLoading: false,
+        role: role,
+        assessments: const [],
+        errorMessage:
+            'Your current role ($role) cannot access this assessment list.',
+      );
+      return;
     }
 
     try {
       final list = await _graphqlService.getAllMyAssessments();
-      state = state.copyWith(assessments: list, role: role, isLoading: false);
+      state = state.copyWith(
+        assessments: list,
+        role: role,
+        isLoading: false,
+        clearError: true,
+      );
     } catch (e) {
-      state = state.copyWith(isLoading: false, role: role);
+      state = state.copyWith(
+        isLoading: false,
+        role: role,
+        errorMessage: e.toString(),
+      );
       if (!silent) rethrow;
     }
   }
