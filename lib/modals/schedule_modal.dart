@@ -114,12 +114,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
   }
 
   final List<Color> _colorOptions = [
-    const Color(0xFF2E7D32), // green
-    const Color(0xFF1565C0), // blue
-    const Color(0xFFE65100), // orange
-    const Color(0xFF6A1B9A), // purple
-    const Color(0xFFC62828), // red
-    const Color(0xFF00838F), // teal
+    const Color(0xFF2E7D32),
+    const Color(0xFF1565C0),
+    const Color(0xFFE65100),
+    const Color(0xFF6A1B9A),
+    const Color(0xFFC62828),
+    const Color(0xFF00838F),
   ];
 
   final List<Map<String, dynamic>> _reminderOptions = [
@@ -132,13 +132,13 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
   ];
 
   static const List<String> _weekDays = [
-    'Mon',
-    'Tue',
-    'Wed',
-    'Thu',
-    'Fri',
-    'Sat',
-    'Sun',
+    'Monday',
+    'Tuesday',
+    'Wednesday',
+    'Thursday',
+    'Friday',
+    'Saturday',
+    'Sunday',
   ];
 
   @override
@@ -258,7 +258,14 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       return;
     }
     try {
-      final baseDate = _recurrenceType == 'NONE' ? _date! : _startDate!;
+      DateTime baseDate;
+      if (_recurrenceType == 'NONE') {
+        baseDate = _date!;
+      } else if (_recurrenceType == 'MONTHLY' && _monthlyDates.isNotEmpty) {
+        baseDate = _monthlyDates.first;
+      } else {
+        baseDate = _startDate!;
+      }
       String message;
 
       if (widget.scheduleId != null) {

@@ -168,55 +168,89 @@ class _TaskCard extends StatelessWidget {
             ),
             const SizedBox(width: 14),
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 10),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${task.courseCode} • ${context.read<CourseProvider>().courses.firstWhere(
-                        (c) => c.courseCode == task.courseCode,
-                        orElse: () => CourseModel(courseCode: '', courseName: 'Unknown'),
-                      ).courseName}',
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.start,
+                    children: [
+                      RichText(
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 1,
+                        text: TextSpan(
+                          children: [
+                            TextSpan(
+                              text: '${task.courseCode} • ',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: _getTaskColor(),
+                              ),
+                            ),
+                            TextSpan(
+                              text: context
+                                  .watch<CourseProvider>()
+                                  .courses
+                                  .firstWhere(
+                                    (c) => c.courseCode == task.courseCode,
+                                    orElse: () => CourseModel(
+                                      courseCode: '',
+                                      courseName: 'Unknown',
+                                    ),
+                                  )
+                                  .courseName,
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: Color(0xFF212121),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                      overflow: TextOverflow.ellipsis,
-                      maxLines: 1,
-                    ),
-                    Row(
-                      children: [
-                        const Text('📍', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            task.location,
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 16,
+                            color: _accentColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              task.location,
+                              style: const TextStyle(
+                                fontSize: 14,
+                                color: Color(0xFF6B6B6B),
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      SizedBox(height: 4),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.access_time,
+                            size: 16,
+                            color: _accentColor,
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '${task.startTime} - ${task.endTime}',
                             style: const TextStyle(
-                              fontSize: 13,
+                              fontSize: 14,
                               color: Color(0xFF6B6B6B),
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
-                    ),
-                    Row(
-                      children: [
-                        const Text('⏳', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 8),
-                        Text(
-                          '${task.startTime} - ${task.endTime}',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            color: Color(0xFF6B6B6B),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

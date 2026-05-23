@@ -77,7 +77,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
 
     if (recurrence == 'monthly') {
-      return date.day == start.day;
+      if (schedule.selectedDays == null || schedule.selectedDays!.isEmpty)
+        return false;
+      final selectedDayNumbers = schedule.selectedDays!
+          .map((d) => int.tryParse(d.trim().split(' ').first))
+          .whereType<int>()
+          .toList();
+      return selectedDayNumbers.contains(date.day);
     }
 
     return false;
