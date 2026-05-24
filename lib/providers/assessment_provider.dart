@@ -10,7 +10,6 @@ class AssessmentProvider extends ChangeNotifier {
   String? error;
 
   List<AssessmentModel> get assessments => _assessments;
-
   List<String> get assessmentName =>
       _assessments.map((e) => e.assessmentName).toList();
 
@@ -24,6 +23,23 @@ class AssessmentProvider extends ChangeNotifier {
         courseCode,
       );
       _assessments = result.map((e) => AssessmentModel.fromMap(e)).toList();
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  List<AssessmentModel> _allAssessments = [];
+  List<AssessmentModel> get allAssessments => _allAssessments;
+  Future<void> loadAllAssessments() async {
+    isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      final result = await _assessmentService.getAllMyAssessments();
+      _allAssessments = result.map((e) => AssessmentModel.fromMap(e)).toList();
     } catch (e) {
       error = e.toString();
     } finally {

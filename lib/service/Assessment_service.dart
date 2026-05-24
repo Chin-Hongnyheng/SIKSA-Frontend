@@ -76,4 +76,40 @@ class AssessmentService {
 
     return result.data!['getAssessmentsByCourseCode'];
   }
+
+  Future<List<dynamic>> getAllMyAssessments() async {
+    final Link authLink = HttpLink(
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+
+    final GraphQLClient authClient = GraphQLClient(
+      link: authLink,
+      cache: GraphQLCache(),
+    );
+
+    const String query = """
+    query {
+      getAllMyAssessments {
+        assessmentName
+        courseCode
+        createdBy
+        createdAt
+      }
+    }
+  """;
+
+    final result = await authClient.query(QueryOptions(document: gql(query)));
+
+    if (result.hasException) {
+      final error = result.exception.toString();
+      if (error.contains("Unauthorized") || error.contains('UNAUTHORIZED')) {
+        await AuthProvider.clearTokens();
+        throw Exception('SESSION_EXPIRED');
+      }
+      throw Exception(error);
+    }
+
+    return result.data!['getAllMyAssessments'];
+  }
 }

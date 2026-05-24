@@ -14,6 +14,8 @@ import 'package:go_router/go_router.dart';
 import '../widgets/loading.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/roles.dart';
+import '../providers/user_provider.dart';
+import 'package:provider/provider.dart';
 
 class AuthenticationScreen extends StatefulWidget {
   const AuthenticationScreen({super.key});
@@ -47,7 +49,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
         context,
         message: "Please fill all fields",
         icon: Icons.error,
-        color: Colors.red,
+        color: const Color.fromARGB(255, 68, 62, 62),
       );
       return;
     }
@@ -91,6 +93,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (verified && context.mounted) {
+        await context.read<UserProvider>().loadUser();
         await CenterToast.show(
           context,
           message: "Login successful",
@@ -98,7 +101,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
           color: Colors.green,
         );
 
-        context.go('/profile');
+        context.go('/dashboard');
       }
     } catch (e) {
       LoadingOverlay.hide();
@@ -327,6 +330,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       );
       await Future.delayed(const Duration(milliseconds: 300));
       if (registered && context.mounted) {
+        await context.read<UserProvider>().loadUser();
         await CenterToast.show(
           context,
           message: "Register successful",

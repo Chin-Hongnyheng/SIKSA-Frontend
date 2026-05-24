@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../models/schedule_model.dart';
 import '../providers/schedule_provider.dart';
@@ -32,7 +33,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   @override
   void initState() {
     super.initState();
-    // Load schedules when screen starts
     Future.microtask(() {
       context.read<ScheduleProvider>().loadSchedules();
     });
@@ -262,7 +262,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           children: [
             ScheduleHeader(
               onRefresh: () => provider.loadSchedules(),
-              onBack: () {},
+              onBack: () {
+                context.pop();
+              },
               backgroundColor: accentColor,
             ),
             Expanded(
