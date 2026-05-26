@@ -8,6 +8,9 @@ import 'providers/course_provider.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/user_provider.dart';
+import 'Attendance/studentAttendance.dart';
+import 'Attendance/teacherAttendance.dart';
+import 'qrcode/scan_code_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
