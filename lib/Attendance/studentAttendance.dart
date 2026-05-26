@@ -73,7 +73,7 @@ class _StudentAttendanceState extends State<StudentAttendance> {
                       });
                     }
                   },
-                )
+                ),
               ],
             ),
 
@@ -254,7 +254,7 @@ class WeekSection extends StatelessWidget {
           const AttendanceRow(day: "16", weekDay: "Mon"),
           const AttendanceRow(day: "17", weekDay: "Tue"),
           const AttendanceRow(day: "18", weekDay: "Wed"),
-        ]
+        ],
       ],
     );
   }
@@ -264,11 +264,7 @@ class AttendanceRow extends StatelessWidget {
   final String day;
   final String weekDay;
 
-  const AttendanceRow({
-    super.key,
-    required this.day,
-    required this.weekDay,
-  });
+  const AttendanceRow({super.key, required this.day, required this.weekDay});
 
   @override
   Widget build(BuildContext context) {
@@ -284,10 +280,7 @@ class AttendanceRow extends StatelessWidget {
         children: [
           Column(
             children: [
-              Text(
-                day,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              Text(day, style: const TextStyle(fontWeight: FontWeight.bold)),
               Text(weekDay),
             ],
           ),

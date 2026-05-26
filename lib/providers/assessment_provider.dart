@@ -48,8 +48,6 @@ class AssessmentProvider extends ChangeNotifier {
     }
   }
 
-  
-
   void clearAssessments() {
     _assessments = [];
     notifyListeners();

@@ -7,7 +7,7 @@ import '../widgets/checkbox.dart';
 import '../widgets/button.dart';
 import '../modals/email_modal.dart';
 import '../modals/OTP_modal.dart';
-import '../widgets/password_modal.dart';
+import '../modals/password_modal.dart';
 import '../service/Authentication_service.dart';
 import '../service/OTP_service.dart';
 import 'package:go_router/go_router.dart';
