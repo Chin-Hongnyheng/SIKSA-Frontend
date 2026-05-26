@@ -1,15 +1,26 @@
-import 'package:frontend/screens/Profile_Screen.dart';
 import 'package:go_router/go_router.dart';
-
-import '../screens/Authentication_Screen.dart';
-import '../screens/Start_Screen.dart';
-import '../screens/Home_Screen.dart';
-import '../screens/student_dashboard.dart';
-import '../screens/notifications_screen.dart';
+import '../screens/authentication_screen.dart';
+import '../screens/start_screen.dart';
+import '../screens/home_screen.dart';
+import '../screens/profile_screen.dart';
+import '../providers/auth_provider.dart';
+import '../screens/schedule_screen.dart';
 import '../screens/assessments_screen.dart';
+import '../screens/dashboard_screen.dart';
 
 final GoRouter router = GoRouter(
   initialLocation: '/',
+  redirect: (context, state) {
+    final loggedIn = AuthProvider.accessToken != null;
+    final path = state.uri.toString();
+    if (!loggedIn && path != '/auth' && path != '/') {
+      return '/';
+    }
+    if (loggedIn && (path == '/' || path == '/auth' || path == '/start')) {
+      return '/dashboard';
+    }
+    return null;
+  },
   routes: [
     GoRoute(path: '/', builder: (context, state) => StartScreen()),
     GoRoute(path: '/auth', builder: (context, state) => AuthenticationScreen()),
@@ -19,13 +30,8 @@ final GoRouter router = GoRouter(
       builder: (context, state) => const AssessmentsScreen(),
     ),
     GoRoute(path: '/profile', builder: (context, state) => ProfileScreen()),
-    GoRoute(
-      path: '/dashboard',
-      builder: (context, state) => StudentDashboard(),
-    ),
-    GoRoute(
-      path: '/notifications',
-      builder: (context, state) => NotificationsScreen(),
-    ),
+    GoRoute(path: '/start', builder: (context, state) => StartScreen()),
+    GoRoute(path: '/schedule', builder: (context, state) => ScheduleScreen()),
+    GoRoute(path: '/dashboard', builder: (context, state) => DashBoardScreen()),
   ],
 );

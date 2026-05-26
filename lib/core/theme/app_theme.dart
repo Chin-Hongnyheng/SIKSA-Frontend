@@ -17,7 +17,7 @@ class AppTheme {
       primary: AppColors.primary,
       onPrimary: Colors.white,
       secondary: AppColors.secondary,
-      onSecondary: Colors.white,
+      onSecondary: Color.fromARGB(255, 73, 61, 61),
       error: AppColors.error,
       onError: Colors.white,
       surface: Colors.white,

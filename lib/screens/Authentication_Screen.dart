@@ -8,12 +8,14 @@ import '../widgets/button.dart';
 import '../modals/email_modal.dart';
 import '../modals/OTP_modal.dart';
 import '../widgets/password_modal.dart';
-import '../graphql/graphql_service.dart';
-import '../graphql/api_service.dart';
+import '../service/Authentication_service.dart';
+import '../service/OTP_service.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/loading.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/roles.dart';
+import '../providers/user_provider.dart';
+import 'package:provider/provider.dart';
 
 class AuthenticationScreen extends StatefulWidget {
   const AuthenticationScreen({super.key});
@@ -91,6 +93,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (verified && context.mounted) {
+        await context.read<UserProvider>().loadUser();
         await CenterToast.show(
           context,
           message: "Login successful",
@@ -327,6 +330,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       );
       await Future.delayed(const Duration(milliseconds: 300));
       if (registered && context.mounted) {
+        await context.read<UserProvider>().loadUser();
         await CenterToast.show(
           context,
           message: "Register successful",

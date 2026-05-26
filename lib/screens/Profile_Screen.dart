@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
-import '../../graphql/graphql_service.dart';
-import '../providers/auth_provider.dart';
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 import 'dart:io';
 import 'package:image_picker/image_picker.dart';
-
+import '../providers/user_provider.dart';
+import '../providers/auth_provider.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/profile_detail_card.dart';
 import '../widgets/profile_more_card.dart';
@@ -12,6 +13,7 @@ import '../modals/gender_modal.dart';
 import '../modals/date_picker_modal.dart';
 import '../modals/notification_modal.dart';
 import '../modals/language_modal.dart';
+import '../widgets/center_toast.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -21,23 +23,107 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  final GraphQLService graphqlService = GraphQLService();
-  Map<String, dynamic>? user;
-  bool isLoading = true;
-  String? error;
   File? _selectedImage;
   final ImagePicker _picker = ImagePicker();
 
-  @override
-  void initState() {
-    super.initState();
-    fetchUser();
+  void _onLogoutTap() {
+    final overlayState = Overlay.of(context, rootOverlay: true);
+    late OverlayEntry entry;
+    entry = OverlayEntry(
+      builder: (_) => Center(
+        child: Material(
+          color: Colors.transparent,
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 300),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.logout, color: Colors.red, size: 32),
+                const SizedBox(height: 12),
+                const Text(
+                  'Log Out',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Are you sure you want to log out?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () => entry.remove(),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () async {
+                          entry.remove();
+                          await _handleLogout();
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Log Out',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+    overlayState.insert(entry);
   }
 
-  @override
-  void reassemble() {
-    super.reassemble();
-    fetchUser();
+  Future<void> _handleLogout() async {
+    context.read<UserProvider>().clearUser(); // 👈 clear user on logout
+    await AuthProvider.clearTokens();
+    if (!mounted) return;
+    context.go('/start');
   }
 
   Future<void> _pickImage() async {
@@ -47,75 +133,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  Future<void> fetchUser() async {
-    if (!mounted) return;
-    setState(() {
-      isLoading = true;
-      error = null;
-    });
-    try {
-      final result = await graphqlService.me();
-      if (!mounted) return;
-      setState(() {
-        user = result;
-        isLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        error = e.toString();
-        isLoading = false;
-      });
-    }
-  }
-
-  /// Called by every modal on Save — updates local state then calls the API
   Future<void> _updateField(String key, String value) async {
-    // 1. Optimistic local update
-    setState(() => user?[key] = value);
-
-    // 2. Build the full profile payload (all fields required by mutation)
-    await _submitProfile();
-  }
-
-  Future<void> _submitProfile() async {
-    if (user == null) return;
-
-    // 👇 add this
-    print('userName: ${user?['userName']}');
-    print('dob: ${user?['dob']}');
-    print('gender: ${user?['gender']}');
-    print('address: ${user?['address']}');
-    print('notification: ${user?['notification']}');
-    print('language: ${user?['language']}');
-
     try {
-      await graphqlService.update(
-        userName: user?['userName'] ?? '',
-        dob: user?['dob'] ?? '',
-        gender: user?['gender'] ?? '',
-        address: user?['address'] ?? '',
-        notification: user?['notification'] ?? 'ON',
-        language: user?['language'] ?? 'ENGLISH',
-      );
+      await context.read<UserProvider>().updateField(key, value);
     } catch (e) {
-      if (!mounted) return;
-      print('❌ updateProfile error: $e');
-      showDialog(
-        context: context,
-        builder: (ctx) => AlertDialog(
-          title: const Text('Error'),
-          content: SelectableText(
-            e.toString(),
-          ), // 👈 SelectableText lets you copy it
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
-            ),
-          ],
-        ),
-      );
+      if (mounted) {
+        CenterToast.show(
+          context,
+          message: e.toString(),
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+      }
     }
   }
 
@@ -125,6 +154,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     bool isGender = false,
     bool isDateOfBirth = false,
   }) {
+    final user = context.read<UserProvider>().userMap;
     if (isGender) {
       showGenderModal(
         context,
@@ -151,6 +181,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _onNotificationTap() {
+    final user = context.read<UserProvider>().userMap;
     showNotificationModal(
       context,
       currentValue: user?['notification'] ?? 'ON',
@@ -159,6 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _onLanguageTap() {
+    final user = context.read<UserProvider>().userMap;
     showLanguageModal(
       context,
       currentValue: user?['language'] ?? 'ENGLISH',
@@ -168,19 +200,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<UserProvider>();
+    final user = provider.userMap;
+
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      body: isLoading
+      body: provider.isLoading
           ? const Center(
               child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
             )
-          : error != null
-          ? _buildError()
-          : _buildBody(),
+          : provider.error != null && user == null
+          ? _buildError(provider)
+          : _buildBody(user),
     );
   }
 
-  Widget _buildError() {
+  Widget _buildError(UserProvider provider) {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(24),
@@ -190,13 +225,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
             const Icon(Icons.error_outline, color: Colors.red, size: 48),
             const SizedBox(height: 16),
             Text(
-              error!,
+              provider.error!,
               style: const TextStyle(color: Colors.red, fontSize: 15),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 20),
             ElevatedButton.icon(
-              onPressed: fetchUser,
+              onPressed: () => context.read<UserProvider>().loadUser(),
               icon: const Icon(Icons.refresh),
               label: const Text('Retry'),
               style: ElevatedButton.styleFrom(
@@ -210,14 +245,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildBody() {
+  Widget _buildBody(Map<String, dynamic>? user) {
     return Column(
       children: [
         ProfileHeader(
           user: user,
           selectedImage: _selectedImage,
           onPickImage: _pickImage,
-          onRefresh: fetchUser,
+          onRefresh: () =>
+              context.read<UserProvider>().loadUser(), // 👈 use provider
           onSettings: () {},
           onBack: () => Navigator.pop(context),
         ),
@@ -255,7 +291,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   const SizedBox(height: 20),
                   ProfileMoreCard(
                     user: user,
-                    onLogout: () {},
+                    onLogout: _onLogoutTap,
                     onNotificationTap: _onNotificationTap,
                     onLanguageTap: _onLanguageTap,
                   ),

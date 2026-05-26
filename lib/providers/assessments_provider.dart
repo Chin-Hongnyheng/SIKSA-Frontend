@@ -1,6 +1,6 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../graphql/graphql_service.dart';
+import '../service/Authentication_service.dart';
 
 class AssessmentsState {
   final bool isLoading;

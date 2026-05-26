@@ -11,11 +11,7 @@ class LogoApp extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Image.asset(
-          'assets/images/logov3.png',
-          width: 50,
-          height: 50,
-        ),
+        Image.asset('assets/images/logov3.png', width: 50, height: 50),
         Text(
           'SIKSA',
           style: GoogleFonts.germaniaOne(

@@ -53,8 +53,10 @@ class GraphQLService {
       throw Exception(result.exception.toString());
     }
 
-    AuthProvider.accessToken = result.data!['register']['accessToken'];
-    AuthProvider.refreshToken = result.data!['register']['refreshToken'];
+    await AuthProvider.saveTokens(
+      accessToken: result.data!['register']['accessToken'],
+      refreshToken: result.data!['register']['refreshToken'],
+    );
 
     return AuthProvider.accessToken!;
   }
@@ -85,7 +87,10 @@ class GraphQLService {
       throw Exception(result.exception.toString());
     }
 
-    AuthProvider.accessToken = result.data!['login']['accessToken'];
+    await AuthProvider.saveTokens(
+      accessToken: result.data!['login']['accessToken'],
+      refreshToken: result.data!['login']['refreshToken'],
+    );
 
     return AuthProvider.accessToken!;
   }
@@ -122,7 +127,14 @@ class GraphQLService {
     final result = await authClient.query(QueryOptions(document: gql(query)));
 
     if (result.hasException) {
-      throw Exception(result.exception.toString());
+      final error = result.exception.toString();
+
+      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
+        await AuthProvider.clearTokens();
+        throw Exception('SESSION_EXPIRED');
+      }
+
+      throw Exception(error);
     }
 
     return result.data!['me'];
@@ -233,7 +245,7 @@ class GraphQLService {
 
   Future<Map<String, dynamic>> update({
     required String userName,
-    required String dob,
+    required String? dob,
     required String gender,
     required String address,
     required String notification,
@@ -282,7 +294,12 @@ class GraphQLService {
     );
     final result = await client.mutate(options);
     if (result.hasException) {
-      throw Exception(result.exception.toString());
+      final exception = result.exception;
+
+      final message = (exception?.graphqlErrors.isNotEmpty == true)
+          ? exception!.graphqlErrors.first.message
+          : exception.toString();
+      throw message;
     }
     print('update result: ${result.data}');
     print('update exception: ${result.exception}');
