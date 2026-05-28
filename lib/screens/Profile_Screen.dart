@@ -120,7 +120,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleLogout() async {
-    context.read<UserProvider>().clearUser(); // 👈 clear user on logout
+    context.read<UserProvider>().clearUser();
     await AuthProvider.clearTokens();
     if (!mounted) return;
     context.go('/start');

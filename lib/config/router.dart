@@ -1,7 +1,6 @@
 import 'package:go_router/go_router.dart';
 import '../screens/authentication_screen.dart';
 import '../screens/start_screen.dart';
-import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../providers/auth_provider.dart';
 import '../screens/schedule_screen.dart';
@@ -24,7 +23,6 @@ final GoRouter router = GoRouter(
   routes: [
     GoRoute(path: '/', builder: (context, state) => StartScreen()),
     GoRoute(path: '/auth', builder: (context, state) => AuthenticationScreen()),
-    GoRoute(path: '/home', builder: (context, state) => HomeScreen()),
     GoRoute(
       path: '/assessments',
       builder: (context, state) => const AssessmentsScreen(),
