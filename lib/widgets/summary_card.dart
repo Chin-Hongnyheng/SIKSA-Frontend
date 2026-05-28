@@ -31,7 +31,7 @@ class SummaryCard extends StatelessWidget {
             style: TextStyle(
               color: borderColor,
               fontWeight: FontWeight.bold,
-              fontSize: 16,
+              fontSize: 18,
             ),
           ),
           const SizedBox(height: 4),
