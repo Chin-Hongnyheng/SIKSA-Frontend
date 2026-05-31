@@ -112,4 +112,90 @@ class AssessmentService {
 
     return result.data!['getAllMyAssessments'];
   }
+
+  Future<String> createAssessment({
+    required String courseCode,
+    required String assessmentName,
+  }) async {
+    final Link authLink = HttpLink(
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+
+    final GraphQLClient authClient = GraphQLClient(
+      link: authLink,
+      cache: GraphQLCache(),
+    );
+
+    const String mutation = """
+      mutation CreateAssessment(\$input: CreateAssessmentInput!) {
+        createAssessment(input: \$input) {
+          message
+        }
+      }
+    """;
+
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      final error = result.exception.toString();
+      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
+        await AuthProvider.clearTokens();
+        throw Exception('SESSION_EXPIRED');
+      }
+      throw Exception(error);
+    }
+
+    return result.data!['createAssessment']['message'];
+  }
+
+  Future<String> deleteAssessment({
+    required String courseCode,
+    required String assessmentName,
+  }) async {
+    final Link authLink = HttpLink(
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+
+    final GraphQLClient authClient = GraphQLClient(
+      link: authLink,
+      cache: GraphQLCache(),
+    );
+
+    const String mutation = """
+      mutation DeleteAssessment(\$input: DeleteAssessmentInput!) {
+        deleteAssessment(input: \$input) {
+          message
+        }
+      }
+    """;
+
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      final error = result.exception.toString();
+      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
+        await AuthProvider.clearTokens();
+        throw Exception('SESSION_EXPIRED');
+      }
+      throw Exception(error);
+    }
+
+    return result.data!['deleteAssessment']['message'];
+  }
 }

@@ -5,7 +5,7 @@ import '../screens/home_screen.dart';
 import '../screens/profile_screen.dart';
 import '../providers/auth_provider.dart';
 import '../screens/schedule_screen.dart';
-import '../screens/assessments_screen.dart';
+import '../screens/assessment_screen.dart';
 import '../screens/dashboard_screen.dart';
 
 final GoRouter router = GoRouter(
