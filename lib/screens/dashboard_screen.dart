@@ -165,7 +165,12 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                       value: myCourseCount.toString(),
                       color: Colors.red,
                       onTap: () {
-                        context.push('/courses');
+                        // Students should see subscribed-only view; teachers see full courses
+                        if (widget.isStudentDashboard) {
+                          context.push('/my-courses');
+                        } else {
+                          context.push('/courses');
+                        }
                       },
                     ),
                   ),

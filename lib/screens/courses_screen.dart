@@ -10,7 +10,14 @@ import '../providers/user_provider.dart';
 import '../widgets/center_toast.dart';
 
 class CoursesScreen extends StatefulWidget {
-  const CoursesScreen({super.key});
+  const CoursesScreen({
+    super.key,
+    this.onlySubscribed = false,
+    this.showSearch = true,
+  });
+
+  final bool onlySubscribed;
+  final bool showSearch;
 
   @override
   State<CoursesScreen> createState() => _CoursesScreenState();
@@ -199,7 +206,13 @@ class _CoursesScreenState extends State<CoursesScreen> {
     final courseProvider = context.watch<CourseProvider>();
     final user = context.watch<UserProvider>().user;
     final canManage = _canManage(user?.role);
-    final courses = _filteredCourses(courseProvider.courses);
+    // apply search filtering first
+    var courses = _filteredCourses(courseProvider.courses);
+
+    // if requested, show only subscribed courses (used by Dashboard -> My Courses)
+    if (widget.onlySubscribed) {
+      courses = courses.where((c) => c.isSubscribed).toList();
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -217,7 +230,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
         child: Column(
           children: [
             _CoursesHeader(
-              title: 'Courses',
+              title: (widget.onlySubscribed && !canManage)
+                  ? 'Courses'
+                  : 'Courses',
               subtitle: canManage ? 'Teacher workspace' : 'Student courses',
               onBackTap: () => context.pop(),
             ),
@@ -228,16 +243,22 @@ class _CoursesScreenState extends State<CoursesScreen> {
                 child: ListView(
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
                   children: [
-                    _CourseSearchField(
-                      controller: _searchController,
-                      onChanged: (value) {
-                        setState(() => _searchText = value);
-                      },
-                    ),
+                    if (widget.showSearch)
+                      _CourseSearchField(
+                        controller: _searchController,
+                        onChanged: (value) {
+                          setState(() => _searchText = value);
+                        },
+                      ),
                     const SizedBox(height: 14),
                     _CourseSummary(
-                      total: courseProvider.courses.length,
+                      total: widget.onlySubscribed
+                          ? courseProvider.courses
+                                .where((c) => c.isSubscribed)
+                                .length
+                          : courseProvider.courses.length,
                       canManage: canManage,
+                      studentSubscribed: widget.onlySubscribed && !canManage,
                     ),
                     const SizedBox(height: 16),
                     if (courseProvider.isLoading &&
@@ -263,19 +284,33 @@ class _CoursesScreenState extends State<CoursesScreen> {
                       _StatusPanel(
                         icon: Icons.menu_book_outlined,
                         title: _searchText.trim().isEmpty
-                            ? 'No courses yet'
+                            ? (widget.onlySubscribed
+                                  ? 'No subscribed courses'
+                                  : 'No courses yet')
                             : 'No matching courses',
                         message: canManage
                             ? 'Create a course to make it available here.'
-                            : 'Courses created by teachers will appear here.',
-                        actionLabel: canManage ? 'Create course' : 'Refresh',
+                            : (widget.onlySubscribed
+                                  ? 'You have not subscribed to any courses yet.'
+                                  : 'Courses created by teachers will appear here.'),
+                        actionLabel: canManage
+                            ? 'Create course'
+                            : (widget.onlySubscribed
+                                  ? 'Browse courses'
+                                  : 'Refresh'),
                         onActionTap: canManage
                             ? () => _openCourseEditor()
-                            : _loadCoursesForRole,
+                            : (widget.onlySubscribed
+                                  ? () => context.push('/courses')
+                                  : _loadCoursesForRole),
                       )
                     else ...[
                       Text(
-                        canManage ? 'My Courses' : 'Available Courses',
+                        canManage
+                            ? 'My Courses'
+                            : (widget.onlySubscribed
+                                  ? 'Courses Subscribed'
+                                  : 'Available Courses'),
                         style: const TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
@@ -396,10 +431,15 @@ class _CourseSearchField extends StatelessWidget {
 }
 
 class _CourseSummary extends StatelessWidget {
-  const _CourseSummary({required this.total, required this.canManage});
+  const _CourseSummary({
+    required this.total,
+    required this.canManage,
+    this.studentSubscribed = false,
+  });
 
   final int total;
   final bool canManage;
+  final bool studentSubscribed;
 
   @override
   Widget build(BuildContext context) {
@@ -430,7 +470,11 @@ class _CourseSummary extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  canManage ? 'Created Courses' : 'Courses Available',
+                  canManage
+                      ? 'Created Courses'
+                      : (studentSubscribed
+                            ? 'Courses Attended'
+                            : 'Courses Available'),
                   style: const TextStyle(
                     color: Color(0xFF718096),
                     fontSize: 12,

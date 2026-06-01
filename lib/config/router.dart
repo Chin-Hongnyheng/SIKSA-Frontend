@@ -62,6 +62,11 @@ final GoRouter router = GoRouter(
       builder: (context, state) => const CoursesScreen(),
     ),
     GoRoute(
+      path: '/my-courses',
+      builder: (context, state) =>
+          const CoursesScreen(onlySubscribed: true, showSearch: false),
+    ),
+    GoRoute(
       path: '/dashboard',
       builder: (context, state) => _dashboardForRole(context),
     ),
