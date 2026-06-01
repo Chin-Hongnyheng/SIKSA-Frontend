@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
-import '../service/Authentication_service.dart';
+import '../service/authentication_service.dart';
 
 class UserProvider extends ChangeNotifier {
   final GraphQLService _graphqlService = GraphQLService();
