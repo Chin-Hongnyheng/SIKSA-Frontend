@@ -1,3 +1,5 @@
+// ignore_for_file: use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import '../widgets/textfield.dart';
 import '../widgets/phonetextfield.dart';
@@ -57,25 +59,30 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
     try {
       LoadingOverlay.show(context);
       await graphqlService.login(email: email, password: password);
-      LoadingOverlay.hide();
-
       if (!context.mounted) return;
-      await context.read<UserProvider>().loadUser();
+
+      final userProvider = context.read<UserProvider>();
+      await userProvider.loadUser();
       await CenterToast.show(
         context,
         message: "Login successful",
         icon: Icons.check_circle,
         color: Colors.green,
       );
-      context.go('/dashboard');
+
+      final role = userProvider.user?.role.trim().toLowerCase();
+      context.go(
+        role == 'student' ? '/student-dashboard' : '/teacher-dashboard',
+      );
     } catch (e) {
-      LoadingOverlay.hide();
       await CenterToast.show(
         context,
         message: e.toString(),
         icon: Icons.error,
         color: Colors.red,
       );
+    } finally {
+      LoadingOverlay.hide();
     }
   }
 

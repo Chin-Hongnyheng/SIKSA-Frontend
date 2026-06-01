@@ -62,4 +62,14 @@ class AssessmentProvider extends ChangeNotifier {
     _assessments.removeWhere((e) => assessmentId == assessmentId);
     notifyListeners();
   }
+
+  Future<void> createAssessment({
+    required String courseCode,
+    required String assessmentName,
+  }) async {}
+
+  Future<void> deleteAssessment({
+    required String courseCode,
+    required String assessmentName,
+  }) async {}
 }
