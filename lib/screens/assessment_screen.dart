@@ -178,7 +178,9 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                         message: canManage
                             ? 'Create an assessment so students can view it here.'
                             : 'No assessments are available for your courses yet.',
-                        actionLabel: canManage ? 'Create assessment' : 'Refresh',
+                        actionLabel: canManage
+                            ? 'Create assessment'
+                            : 'Refresh',
                         onActionTap: canManage
                             ? _openCreateModal
                             : () => context

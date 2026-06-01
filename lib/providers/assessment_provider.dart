@@ -40,7 +40,6 @@ class AssessmentProvider extends ChangeNotifier {
     try {
       final result = await _assessmentService.getAllMyAssessments();
       _allAssessments = result.map((e) => AssessmentModel.fromMap(e)).toList();
-      _assessments = List<AssessmentModel>.from(_allAssessments);
     } catch (e) {
       error = e.toString();
     } finally {
@@ -56,49 +55,21 @@ class AssessmentProvider extends ChangeNotifier {
 
   void addAssessment(AssessmentModel assessment) {
     _assessments.add(assessment);
-    _allAssessments.add(assessment);
     notifyListeners();
   }
 
   void removeAssessment(String assessmentId) {
-    _assessments.removeWhere(
-      (assessment) => assessment.assessmentName == assessmentId,
-    );
-    _allAssessments.removeWhere(
-      (assessment) => assessment.assessmentName == assessmentId,
-    );
+    _assessments.removeWhere((e) => assessmentId == assessmentId);
     notifyListeners();
   }
 
   Future<void> createAssessment({
     required String courseCode,
     required String assessmentName,
-  }) async {
-    await _assessmentService.createAssessment(
-      courseCode: courseCode,
-      assessmentName: assessmentName,
-    );
-    await loadAllAssessments();
-  }
+  }) async {}
 
   Future<void> deleteAssessment({
     required String courseCode,
     required String assessmentName,
-  }) async {
-    await _assessmentService.deleteAssessment(
-      courseCode: courseCode,
-      assessmentName: assessmentName,
-    );
-    _assessments.removeWhere(
-      (assessment) =>
-          assessment.courseCode == courseCode &&
-          assessment.assessmentName == assessmentName,
-    );
-    _allAssessments.removeWhere(
-      (assessment) =>
-          assessment.courseCode == courseCode &&
-          assessment.assessmentName == assessmentName,
-    );
-    notifyListeners();
-  }
+  }) async {}
 }

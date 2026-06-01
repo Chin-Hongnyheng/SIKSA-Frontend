@@ -61,7 +61,8 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       await graphqlService.login(email: email, password: password);
       if (!context.mounted) return;
 
-      await context.read<UserProvider>().loadUser();
+      final userProvider = context.read<UserProvider>();
+      await userProvider.loadUser();
       await CenterToast.show(
         context,
         message: "Login successful",
@@ -69,7 +70,10 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
         color: Colors.green,
       );
 
-      context.go('/dashboard');
+      final role = userProvider.user?.role.trim().toLowerCase();
+      context.go(
+        role == 'student' ? '/student-dashboard' : '/teacher-dashboard',
+      );
     } catch (e) {
       await CenterToast.show(
         context,
