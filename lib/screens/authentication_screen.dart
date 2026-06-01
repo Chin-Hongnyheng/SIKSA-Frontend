@@ -7,7 +7,7 @@ import '../widgets/checkbox.dart';
 import '../widgets/button.dart';
 import '../modals/email_modal.dart';
 import '../modals/OTP_modal.dart';
-import '../modals/password_modal.dart';
+import '../widgets/password_modal.dart';
 import '../service/Authentication_service.dart';
 import '../service/OTP_service.dart';
 import 'package:go_router/go_router.dart';
@@ -56,18 +56,53 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
     try {
       LoadingOverlay.show(context);
-      await graphqlService.login(email: email, password: password);
+      await graphqlService.validateLogin(email: email, password: password);
+      await ApiService.sendOtp(email);
       LoadingOverlay.hide();
-
       if (!context.mounted) return;
-      await context.read<UserProvider>().loadUser();
-      await CenterToast.show(
-        context,
-        message: "Login successful",
-        icon: Icons.check_circle,
-        color: Colors.green,
+
+      bool verified = false;
+
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: Colors.transparent,
+        isDismissible: true,
+        enableDrag: true,
+        useSafeArea: true,
+        constraints: const BoxConstraints(maxHeight: double.infinity),
+        builder: (bottomSheetContext) => OtpModal(
+          email: email,
+          onVerify: () async {
+            try {
+              // 4. Login
+              await graphqlService.login(email: email, password: password);
+              if (!mounted) return;
+              verified = true;
+            } catch (e) {
+              await CenterToast.show(
+                context,
+                message: "Login failed: $e",
+                icon: Icons.error,
+                color: Colors.red,
+              );
+            }
+          },
+        ),
       );
-      context.go('/dashboard');
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (verified && context.mounted) {
+        await context.read<UserProvider>().loadUser();
+        await CenterToast.show(
+          context,
+          message: "Login successful",
+          icon: Icons.check_circle,
+          color: Colors.green,
+        );
+
+        context.go('/dashboard');
+      }
     } catch (e) {
       LoadingOverlay.hide();
       await CenterToast.show(

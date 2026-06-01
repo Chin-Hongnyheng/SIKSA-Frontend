@@ -28,6 +28,32 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
     return 'Good Evening';
   }
 
+  String _getUserRole(dynamic user) {
+    if (user == null) return '';
+
+    try {
+      final value = user.role;
+      if (value != null) return value.toString().toLowerCase();
+    } catch (_) {}
+
+    try {
+      final value = user.userType;
+      if (value != null) return value.toString().toLowerCase();
+    } catch (_) {}
+
+    try {
+      final value = user.accountType;
+      if (value != null) return value.toString().toLowerCase();
+    } catch (_) {}
+
+    try {
+      final value = user.type;
+      if (value != null) return value.toString().toLowerCase();
+    } catch (_) {}
+
+    return '';
+  }
+
   @override
   Widget build(BuildContext context) {
     final user = context.watch<UserProvider>().user;
@@ -209,7 +235,23 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                       ),
                       title: 'Attendance',
                       onTap: () {
-                        context.push('attendance');
+                        final currentUser = context.read<UserProvider>().user;
+                        final role = _getUserRole(currentUser);
+
+                        if (role == 'teacher' || role == 'instructor') {
+                          context.push('/attendance');
+                        } else if (role == 'student') {
+                          context.push('/attendance/student');
+                        } else {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'User role not found. Current role: ${role.isEmpty ? "empty" : role}',
+                              ),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
                       },
                     ),
                   ),

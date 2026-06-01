@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
-import 'package:frontend/screens/Attendance/create_attendance_session.dart';
-import 'package:frontend/screens/Attendance/view_attendance_sessions_page.dart';
+import 'create_attendance_session_page.dart';
+import 'view_attendance_sessions_page.dart';
 
 class AttendanceHomePage extends StatelessWidget {
   const AttendanceHomePage({super.key});
