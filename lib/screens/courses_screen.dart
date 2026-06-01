@@ -542,14 +542,21 @@ class _CourseListCard extends StatelessWidget {
                         if (value == 'edit') onEdit();
                         if (value == 'delete') onDelete();
                       },
-                      itemBuilder: (context) => const [
+                      itemBuilder: (context) => [
                         PopupMenuItem(
                           value: 'edit',
                           child: Row(
                             children: [
-                              Icon(Icons.edit_outlined, size: 20),
-                              SizedBox(width: 10),
-                              Text('Edit'),
+                              Icon(
+                                Icons.edit_outlined,
+                                size: 20,
+                                color: AppColors.success,
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Edit',
+                                style: TextStyle(color: AppColors.darkText),
+                              ),
                             ],
                           ),
                         ),
@@ -557,9 +564,16 @@ class _CourseListCard extends StatelessWidget {
                           value: 'delete',
                           child: Row(
                             children: [
-                              Icon(Icons.delete_outline, size: 20),
-                              SizedBox(width: 10),
-                              Text('Delete'),
+                              Icon(
+                                Icons.delete_outline,
+                                size: 20,
+                                color: AppColors.error,
+                              ),
+                              const SizedBox(width: 10),
+                              const Text(
+                                'Delete',
+                                style: TextStyle(color: AppColors.darkText),
+                              ),
                             ],
                           ),
                         ),

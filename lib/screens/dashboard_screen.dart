@@ -164,6 +164,9 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                       title: 'My Courses',
                       value: myCourseCount.toString(),
                       color: Colors.red,
+                      onTap: () {
+                        context.push('/courses');
+                      },
                     ),
                   ),
                   const SizedBox(width: 16), // Middle gap
