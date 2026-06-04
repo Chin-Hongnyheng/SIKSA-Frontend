@@ -221,6 +221,23 @@ class AttendanceService {
     return [];
   }
 
+  Future<bool> deleteAttendanceSession(String sessionId) async {
+    const mutation = r'''
+      mutation DeleteAttendanceSession($sessionId: String!) {
+        deleteAttendanceSession(sessionId: $sessionId)
+      }
+    ''';
+
+    final data = await _postGraphQL(
+      query: mutation,
+      variables: {
+        "sessionId": sessionId,
+      },
+    );
+
+    return data["deleteAttendanceSession"] == true;
+  }
+
   Future<List<AttendanceRecordModel>> getSessionAttendance(
     String sessionId,
   ) async {
