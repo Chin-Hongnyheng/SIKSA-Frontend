@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import '../widgets/button.dart';
 import '../core/theme/app_colors.dart';
 import '../service/Schedule_service.dart';
+import '../service/Course_service.dart';
 import '../widgets/center_toast.dart';
-import '../providers/course_provider.dart';
-import '../providers/assessment_provider.dart';
 
 Future<void> showCreateScheduleModal(
   BuildContext context, {
@@ -17,26 +15,15 @@ Future<void> showCreateScheduleModal(
   await showDialog(
     context: context,
     barrierDismissible: false,
-    builder: (ctx) => MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(
-          value: Provider.of<CourseProvider>(context, listen: false),
-        ),
-        ChangeNotifierProvider.value(
-          value: Provider.of<AssessmentProvider>(context, listen: false),
-        ),
-      ],
-
-      child: Dialog(
-        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        backgroundColor: Colors.white,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: _CreateScheduleDialog(
-          onSubmit: onSubmit,
-          initialData: initialData,
-          title: title,
-          scheduleId: scheduleId,
-        ),
+    builder: (ctx) => Dialog(
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+      backgroundColor: Colors.white,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      child: _CreateScheduleDialog(
+        onSubmit: onSubmit,
+        initialData: initialData,
+        title: title,
+        scheduleId: scheduleId,
       ),
     ),
   );
@@ -60,15 +47,21 @@ class _CreateScheduleDialog extends StatefulWidget {
 }
 
 class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
-  String? _selectedCourseCode;
-  String? _selectedAssessmentName;
+  // Course fields
+  final _courseNameController = TextEditingController();
+  final _courseCodeController = TextEditingController();
+  final _courseDescriptionController = TextEditingController();
+
+  // Schedule fields
   final _locationController = TextEditingController();
   final _dateController = TextEditingController();
   final _startDateController = TextEditingController();
   final _endDateController = TextEditingController();
   final _startTimeController = TextEditingController();
   final _endTimeController = TextEditingController();
+
   final ScheduleService _scheduleService = ScheduleService();
+  final CourseService _courseService = CourseService();
 
   String _recurrenceType = 'NONE';
   DateTime? _date;
@@ -82,13 +75,16 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
   Color _selectedColor = const Color(0xFF2E7D32);
   int? _selectedReminder = 0;
 
+  bool get _isEditing => widget.scheduleId != null;
+
   @override
   void initState() {
     super.initState();
     if (widget.initialData != null) {
-      _selectedCourseCode = widget.initialData!['courseCode'] as String?;
-      _selectedAssessmentName =
-          widget.initialData!['assessmentName'] as String?;
+      _courseCodeController.text =
+          widget.initialData!['courseCode'] as String? ?? '';
+      _courseNameController.text =
+          widget.initialData!['courseName'] as String? ?? '';
       _locationController.text =
           widget.initialData!['location'] as String? ?? '';
       _startTimeController.text =
@@ -143,6 +139,9 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
   @override
   void dispose() {
+    _courseNameController.dispose();
+    _courseCodeController.dispose();
+    _courseDescriptionController.dispose();
     _locationController.dispose();
     _dateController.dispose();
     _startDateController.dispose();
@@ -208,12 +207,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
   }
 
   bool _validate() {
-    if (_selectedCourseCode == null || _selectedCourseCode!.isEmpty) {
+    if (_courseCodeController.text.trim().isEmpty) {
       _errorMessage = 'Course code is required.';
       return false;
     }
-    if (_selectedAssessmentName == null || _selectedAssessmentName!.isEmpty) {
-      _errorMessage = 'Assessment name is required.';
+    if (_courseNameController.text.trim().isEmpty) {
+      _errorMessage = 'Course name is required.';
       return false;
     }
     if (_locationController.text.trim().isEmpty) {
@@ -257,7 +256,38 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       setState(() {});
       return;
     }
+
     try {
+      final courseCode = _courseCodeController.text.trim();
+      final courseName = _courseNameController.text.trim();
+      final description = _courseDescriptionController.text.trim();
+
+      // ── Step 1: Create OR edit course ────────────────────────────────
+      if (_isEditing) {
+        // Edit mode: update course name + description (courseCode is locked)
+        await _courseService.editCourse(
+          courseCode: courseCode,
+          courseName: courseName,
+          newCourseCode: courseCode,
+          description: description.isNotEmpty ? description : null,
+        );
+      } else {
+        // Create mode: create a new course
+        try {
+          await _courseService.createCourse(
+            courseCode: courseCode,
+            courseName: courseName,
+            description: description.isNotEmpty ? description : null,
+          );
+        } catch (e) {
+          final msg = e.toString();
+          if (!msg.contains('already exists')) {
+            rethrow;
+          }
+        }
+      }
+
+      // ── Step 2: Create or edit schedule ───────────────────────────────
       DateTime baseDate;
       if (_recurrenceType == 'NONE') {
         baseDate = _date!;
@@ -266,14 +296,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       } else {
         baseDate = _startDate!;
       }
-      String message;
 
-      if (widget.scheduleId != null) {
-        // EDIT mode
+      String message;
+      if (_isEditing) {
         message = await _scheduleService.editSchedule(
           scheduleId: widget.scheduleId!,
-          courseCode: _selectedCourseCode!,
-          assessmentName: _selectedAssessmentName!,
+          courseCode: courseCode,
           location: _locationController.text.trim(),
           startTime: _buildIsoDateTime(baseDate, _startTime!),
           endTime: _buildIsoDateTime(baseDate, _endTime!),
@@ -286,10 +314,8 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
           selectedDays: _recurrenceType == 'WEEKLY' ? _weeklyDays.toList() : [],
         );
       } else {
-        // CREATE mode
         message = await _scheduleService.createSchedule(
-          courseCode: _selectedCourseCode!,
-          assessmentName: _selectedAssessmentName!,
+          courseCode: courseCode,
           location: _locationController.text.trim(),
           startTime: _buildIsoDateTime(baseDate, _startTime!),
           endTime: _buildIsoDateTime(baseDate, _endTime!),
@@ -310,17 +336,16 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       debugPrint(message);
       CenterToast.show(
         context,
-        message: widget.scheduleId != null
-            ? "Schedule updated successfully"
-            : "Schedule created successfully",
+        message: _isEditing
+            ? 'Course saved successfully'
+            : 'Schedule created successfully',
         icon: Icons.check_circle,
         color: Colors.green,
       );
 
       final schedule = {
-        'courseCode': _selectedCourseCode,
-        'courseName': _selectedAssessmentName,
-        'assessmentName': _selectedAssessmentName,
+        'courseCode': courseCode,
+        'courseName': courseName,
         'location': _locationController.text.trim(),
         'startTime': _formatTimeForPayload(_startTime!),
         'endTime': _formatTimeForPayload(_endTime!),
@@ -333,24 +358,113 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
         'selectedDays': _recurrenceType == 'WEEKLY' ? _weeklyDays.toList() : [],
       };
 
-      widget.onSubmit(schedule);
       if (!mounted) return;
       Navigator.pop(context);
+      widget.onSubmit(schedule);
     } catch (e, stackTrace) {
-      debugPrint("SCHEDULE FAILED:");
-      debugPrint("ERROR: $e");
-      debugPrint("STACK TRACE: $stackTrace");
+      debugPrint('SUBMIT FAILED:');
+      debugPrint('ERROR: $e');
+      debugPrint('STACK TRACE: $stackTrace');
       String errorMessage = e.toString();
-      if (errorMessage.startsWith("Exception: ")) {
-        errorMessage = errorMessage.replaceFirst("Exception: ", "");
+      if (errorMessage.startsWith('Exception: ')) {
+        errorMessage = errorMessage.replaceFirst('Exception: ', '');
       }
-      if (errorMessage == "SESSION_EXPIRED") {
-        errorMessage = "Session expired. Please login again.";
+      if (errorMessage == 'SESSION_EXPIRED') {
+        errorMessage = 'Session expired. Please login again.';
       }
       setState(() {
         _errorMessage = errorMessage;
       });
     }
+  }
+
+  Widget _buildSectionHeader(String label, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Row(
+        children: [
+          Icon(icon, size: 18, color: AppColors.primary),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              color: AppColors.primary,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(color: AppColors.primary.withOpacity(0.2))),
+        ],
+      ),
+    );
+  }
+
+  /// Renders a text field. When [locked] is true the field is read-only and
+  /// visually dimmed so the user knows it cannot be changed.
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required String hint,
+    int maxLines = 1,
+    bool locked = false,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkText,
+              ),
+            ),
+            if (locked) ...[
+              const SizedBox(width: 6),
+              const Icon(
+                Icons.lock_outline,
+                size: 14,
+                color: AppColors.caption,
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: locked
+                  ? AppColors.primary.withOpacity(0.15)
+                  : AppColors.primary.withOpacity(0.3),
+            ),
+            borderRadius: BorderRadius.circular(12),
+            color: locked ? Colors.grey.shade100 : Colors.white,
+          ),
+          child: TextField(
+            controller: controller,
+            maxLines: maxLines,
+            readOnly: locked,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(color: AppColors.caption),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+            ),
+            style: TextStyle(
+              color: locked ? AppColors.caption : AppColors.darkText,
+              fontSize: 14,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildDateField({
@@ -364,12 +478,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
         Text(
           label,
           style: const TextStyle(
-            fontSize: 16,
+            fontSize: 14,
             fontWeight: FontWeight.w600,
             color: AppColors.darkText,
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         GestureDetector(
           onTap: onTap,
           child: Container(
@@ -381,7 +495,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
             child: Row(
               children: [
-                Icon(Icons.calendar_today, size: 20, color: AppColors.primary),
+                Icon(Icons.calendar_today, size: 18, color: AppColors.primary),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -506,7 +620,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             const Text(
               'Select days',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppColors.darkText,
               ),
@@ -576,11 +690,11 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             const SizedBox(height: 16),
             Row(
               children: [
-                Expanded(
+                const Expanded(
                   child: Text(
                     'Monthly dates',
                     style: TextStyle(
-                      fontSize: 16,
+                      fontSize: 14,
                       fontWeight: FontWeight.w600,
                       color: AppColors.darkText,
                     ),
@@ -614,7 +728,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             if (_monthlyDates.isEmpty)
               const Text(
                 'Pick one or more dates like 14 Feb or 16 Jul.',
-                style: TextStyle(color: AppColors.caption),
+                style: TextStyle(color: AppColors.caption, fontSize: 13),
               ),
             Wrap(
               spacing: 8,
@@ -623,9 +737,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                 return InputChip(
                   label: Text(_buildDateLabel(date)),
                   onDeleted: () {
-                    setState(() {
-                      _monthlyDates.remove(date);
-                    });
+                    setState(() => _monthlyDates.remove(date));
                   },
                 );
               }).toList(),
@@ -639,14 +751,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final courseProvider = Provider.of<CourseProvider>(context);
-    final assessmentProvider = Provider.of<AssessmentProvider>(context);
-
-    final courseCodeList = courseProvider.courseCodes.toSet().toList();
-    final assessmentNameList = assessmentProvider.assessmentName
-        .toSet()
-        .toList();
-
     return Padding(
       padding: const EdgeInsets.all(24),
       child: SingleChildScrollView(
@@ -654,14 +758,14 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header with close button
+            // Header
             Row(
               children: [
                 Expanded(
                   child: Text(
                     widget.title,
                     style: const TextStyle(
-                      fontSize: 24,
+                      fontSize: 22,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -676,145 +780,43 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             ),
             const SizedBox(height: 24),
 
-            // Course Code Dropdown
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Course Code',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.darkText,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: AppColors.primary.withOpacity(0.3),
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.white,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: DropdownButton<String>(
-                    value: courseCodeList.contains(_selectedCourseCode)
-                        ? _selectedCourseCode
-                        : null,
-                    items: courseCodeList
-                        .map(
-                          (course) => DropdownMenuItem(
-                            value: course,
-                            child: Text(
-                              course,
-                              style: const TextStyle(color: AppColors.darkText),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) async {
-                      if (value == null) return;
+            // ── COURSE INFO SECTION ──────────────────────────────────────
+            _buildSectionHeader('Course Information', Icons.school_outlined),
 
-                      setState(() {
-                        _selectedCourseCode = value;
-                        _selectedAssessmentName = null;
-                        _errorMessage = null;
-                      });
-
-                      final assessmentProvider =
-                          Provider.of<AssessmentProvider>(
-                            context,
-                            listen: false,
-                          );
-                      assessmentProvider.clearAssessments();
-                      await assessmentProvider.loadAssessments(value);
-                    },
-                    hint: const Text('Select a course'),
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                  ),
-                ),
-              ],
+            // courseCode is locked in edit mode
+            _buildTextField(
+              controller: _courseCodeController,
+              label: 'Course Code',
+              hint: 'e.g. CS101',
+              locked: _isEditing,
             ),
-            const SizedBox(height: 16),
-
-            // Assessment Name Dropdown
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Assessment Name',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.darkText,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: AppColors.primary.withOpacity(0.3),
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                    color: Colors.white,
-                  ),
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  child: DropdownButton<String>(
-                    value: assessmentNameList.contains(_selectedAssessmentName)
-                        ? _selectedAssessmentName
-                        : null,
-                    items: assessmentNameList
-                        .map(
-                          (assessment) => DropdownMenuItem(
-                            value: assessment,
-                            child: Text(
-                              assessment,
-                              style: const TextStyle(color: AppColors.darkText),
-                            ),
-                          ),
-                        )
-                        .toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedAssessmentName = value;
-                        _errorMessage = null;
-                      });
-                    },
-                    hint: const Text(
-                      'Select an assessment',
-                      style: TextStyle(color: AppColors.caption),
-                    ),
-                    isExpanded: true,
-                    underline: const SizedBox(),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _courseNameController,
+              label: 'Course Name',
+              hint: 'e.g. Introduction to Computer Science',
             ),
-            const SizedBox(height: 16),
-
-            // Location TextField
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'Location',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.darkText,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                _buildBorderedTextField(
-                  controller: _locationController,
-                  hint: 'Enter a location',
-                  icon: Icons.location_on,
-                ),
-              ],
+            const SizedBox(height: 12),
+            _buildTextField(
+              controller: _courseDescriptionController,
+              label: 'Description (optional)',
+              hint: 'Brief description of the course',
+              maxLines: 2,
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
+
+            // ── SCHEDULE SECTION ─────────────────────────────────────────
+            _buildSectionHeader(
+              'Schedule Details',
+              Icons.calendar_month_outlined,
+            ),
+
+            _buildTextField(
+              controller: _locationController,
+              label: 'Location',
+              hint: 'Enter a location',
+            ),
+            const SizedBox(height: 12),
 
             // Start and End Time
             Row(
@@ -826,12 +828,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                       const Text(
                         'Start Time',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: AppColors.darkText,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       GestureDetector(
                         onTap: () async {
                           final time = await showTimePicker(
@@ -864,12 +866,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                       const Text(
                         'End Time',
                         style: TextStyle(
-                          fontSize: 16,
+                          fontSize: 14,
                           fontWeight: FontWeight.w600,
                           color: AppColors.darkText,
                         ),
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 6),
                       GestureDetector(
                         onTap: () async {
                           final time = await showTimePicker(
@@ -896,21 +898,21 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Recurrence Type Dropdown
+            // Recurrence Type
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
                   'Recurrence Type',
                   style: TextStyle(
-                    fontSize: 16,
+                    fontSize: 14,
                     fontWeight: FontWeight.w600,
                     color: AppColors.darkText,
                   ),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 6),
                 Container(
                   decoration: BoxDecoration(
                     border: Border.all(
@@ -927,7 +929,8 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                           (option) => DropdownMenuItem(
                             value: option,
                             child: Text(
-                              option[0].toUpperCase() + option.substring(1),
+                              option[0].toUpperCase() +
+                                  option.substring(1).toLowerCase(),
                               style: const TextStyle(color: AppColors.darkText),
                             ),
                           ),
@@ -946,16 +949,16 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
 
-            // Recurrence Controls
             _buildRecurrenceControls(),
-
             const SizedBox(height: 16),
+
+            // Color picker
             const Text(
               'Color',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppColors.darkText,
               ),
@@ -985,10 +988,12 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
               }).toList(),
             ),
             const SizedBox(height: 16),
+
+            // Reminder
             const Text(
               'Reminder',
               style: TextStyle(
-                fontSize: 16,
+                fontSize: 14,
                 fontWeight: FontWeight.w600,
                 color: AppColors.darkText,
               ),
@@ -1003,19 +1008,9 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
               padding: const EdgeInsets.symmetric(horizontal: 12),
               child: DropdownButton<int>(
                 value: _selectedReminder,
-                hint: Row(
-                  children: [
-                    Icon(
-                      Icons.notifications_none,
-                      size: 20,
-                      color: AppColors.primary,
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'No reminder',
-                      style: TextStyle(color: AppColors.caption),
-                    ),
-                  ],
+                hint: const Text(
+                  'No reminder',
+                  style: TextStyle(color: AppColors.caption),
                 ),
                 isExpanded: true,
                 underline: const SizedBox(),
@@ -1050,9 +1045,10 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             ],
 
             const SizedBox(height: 24),
-
-            // Save Button
-            AppButton(text: 'Save Schedule', onPressed: _submit),
+            AppButton(
+              text: _isEditing ? 'Edit Course' : 'Save Schedule',
+              onPressed: _submit,
+            ),
             const SizedBox(height: 12),
           ],
         ),
@@ -1060,36 +1056,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
     );
   }
 
-  /// Build a bordered text field with OTP-like style
-  Widget _buildBorderedTextField({
-    required TextEditingController controller,
-    required String hint,
-    IconData? icon,
-  }) {
-    return Container(
-      decoration: BoxDecoration(
-        border: Border.all(color: AppColors.primary.withOpacity(0.3)),
-        borderRadius: BorderRadius.circular(12),
-        color: Colors.white,
-      ),
-      child: TextField(
-        controller: controller,
-        decoration: InputDecoration(
-          hintText: hint,
-          hintStyle: const TextStyle(color: AppColors.caption),
-          prefixIcon: icon != null
-              ? Icon(icon, size: 20, color: AppColors.primary)
-              : null,
-          prefixIconConstraints: const BoxConstraints(minWidth: 40),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(vertical: 12),
-        ),
-        style: const TextStyle(color: AppColors.darkText),
-      ),
-    );
-  }
-
-  /// Build a bordered time display (read-only)
   Widget _buildBorderedTimeDisplay({required String label}) {
     return Container(
       decoration: BoxDecoration(
@@ -1100,7 +1066,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       child: Row(
         children: [
-          Icon(Icons.schedule, size: 20, color: AppColors.primary),
+          Icon(Icons.schedule, size: 18, color: AppColors.primary),
           const SizedBox(width: 8),
           Text(
             label,

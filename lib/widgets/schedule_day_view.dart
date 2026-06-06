@@ -12,9 +12,6 @@ const int _startHour = 7;
 const int _endHour = 22;
 const double _hourHeight = 96.0;
 
-// ─────────────────────────────────────────────
-// Date strip (the 7-day horizontal selector)
-// ─────────────────────────────────────────────
 class ScheduleDateSelector extends StatelessWidget {
   final DateTime visibleStartDate;
   final DateTime? selectedDate;
@@ -105,20 +102,10 @@ class ScheduleDateSelector extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Timeline graph (existing widget, unchanged)
-// ─────────────────────────────────────────────
 class ScheduleTimelineGraph extends StatelessWidget {
   final List<ScheduleModel> tasks;
-  final void Function(ScheduleModel task) onEdit;
-  final void Function(ScheduleModel task) onDelete;
 
-  const ScheduleTimelineGraph({
-    super.key,
-    required this.tasks,
-    required this.onEdit,
-    required this.onDelete,
-  });
+  const ScheduleTimelineGraph({super.key, required this.tasks});
 
   double _timeToOffset(String time) {
     final parts = time.split(':');
@@ -189,8 +176,6 @@ class ScheduleTimelineGraph extends StatelessWidget {
                         _timeToOffset(task.endTime) -
                             _timeToOffset(task.startTime),
                       ),
-                      onEdit: () => onEdit(task),
-                      onDelete: () => onDelete(task),
                     ),
                   ),
               ],
@@ -202,21 +187,11 @@ class ScheduleTimelineGraph extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Task card (existing widget, unchanged)
-// ─────────────────────────────────────────────
 class _TaskCard extends StatelessWidget {
   final ScheduleModel task;
   final double height;
-  final VoidCallback onEdit;
-  final VoidCallback onDelete;
 
-  const _TaskCard({
-    required this.task,
-    required this.height,
-    required this.onEdit,
-    required this.onDelete,
-  });
+  const _TaskCard({required this.task, required this.height});
 
   Color _getTaskColor() {
     try {
@@ -350,61 +325,6 @@ class _TaskCard extends StatelessWidget {
                 ),
               ),
             ),
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.only(top: 8, right: 8),
-                child: PopupMenuButton<String>(
-                  padding: EdgeInsets.zero,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: Color(0xFF6B6B6B),
-                    size: 20,
-                  ),
-                  onSelected: (value) {
-                    if (value == 'edit') onEdit();
-                    if (value == 'delete') onDelete();
-                  },
-                  itemBuilder: (context) => [
-                    PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.edit, size: 18, color: _accentColor),
-                          SizedBox(width: 10),
-                          Text(
-                            'Edit',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF212121),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: const [
-                          Icon(Icons.delete, size: 18, color: Colors.redAccent),
-                          SizedBox(width: 10),
-                          Text(
-                            'Delete',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF212121),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
           ],
         ),
       ),
@@ -412,15 +332,10 @@ class _TaskCard extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
-// Day view — combines date selector + timeline
-// ─────────────────────────────────────────────
 class ScheduleDayView extends StatelessWidget {
   final DateTime visibleStartDate;
   final DateTime selectedDate;
   final List<ScheduleModel> visibleSchedules;
-  final void Function(ScheduleModel) onEdit;
-  final void Function(ScheduleModel) onDelete;
   final ValueChanged<DateTime> onDateSelected;
 
   const ScheduleDayView({
@@ -428,8 +343,6 @@ class ScheduleDayView extends StatelessWidget {
     required this.visibleStartDate,
     required this.selectedDate,
     required this.visibleSchedules,
-    required this.onEdit,
-    required this.onDelete,
     required this.onDateSelected,
   });
 
@@ -447,11 +360,7 @@ class ScheduleDayView extends StatelessWidget {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: SingleChildScrollView(
-              child: ScheduleTimelineGraph(
-                tasks: visibleSchedules,
-                onEdit: onEdit,
-                onDelete: onDelete,
-              ),
+              child: ScheduleTimelineGraph(tasks: visibleSchedules),
             ),
           ),
         ),

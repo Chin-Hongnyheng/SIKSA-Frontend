@@ -8,11 +8,8 @@ import '../screens/profile_screen.dart';
 import '../providers/auth_provider.dart';
 import '../providers/user_provider.dart';
 import '../screens/schedule_screen.dart';
-<<<<<<< HEAD
-import '../screens/assessments_screen.dart';
 import '../screens/dashboard_screen.dart';
 import '../screens/loading_screen.dart';
-=======
 import '../screens/assessment_screen.dart';
 import '../screens/courses_screen.dart';
 import '../screens/student_dashboard_screen.dart';
@@ -32,7 +29,6 @@ Widget _dashboardForRole(BuildContext context) {
 
   return const TeacherDashBoardScreen();
 }
->>>>>>> vong
 
 final GoRouter router = GoRouter(
   initialLocation: '/',

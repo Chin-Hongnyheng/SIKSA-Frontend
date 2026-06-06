@@ -3,6 +3,8 @@ import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../models/schedule_model.dart';
 import '../providers/schedule_provider.dart';
+import '../providers/course_provider.dart';
+import '../providers/user_provider.dart';
 import '../modals/schedule_modal.dart';
 import '../widgets/schedule_header.dart';
 import '../widgets/schedule_day_view.dart';
@@ -197,15 +199,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
-  void _openCreateModal() {
-    showCreateScheduleModal(
-      context,
-      onSubmit: (map) => context.read<ScheduleProvider>().addSchedule(
-        ScheduleModel.fromMap(map),
-      ),
-    );
-  }
-
   Future<void> _handleEdit(ScheduleModel s) async {
     await showCreateScheduleModal(
       context,
@@ -225,10 +218,11 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         'reminder': s.reminder,
         'selectedDays': s.selectedDays,
       },
-      onSubmit: (map) => context.read<ScheduleProvider>().editSchedule(
-        s.scheduleId,
-        ScheduleModel.fromMap({...map, 'scheduleId': s.scheduleId}),
-      ),
+      onSubmit: (_) async {
+        await context.read<ScheduleProvider>().loadSchedules();
+        final role = context.read<UserProvider>().user?.role;
+        await context.read<CourseProvider>().loadCourses(role: role);
+      },
     );
   }
 
@@ -320,15 +314,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateModal,
-        backgroundColor: accentColor,
-        tooltip: 'Create Schedule',
-        child: const Icon(Icons.add, size: 28),
-      ),
       body: Stack(
         children: [
-          // ── Full screen animated background ────────────────────────
           const Positioned.fill(
             child: FloatingLinesBackground(
               colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
@@ -336,10 +323,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               animationSpeed: 0.5,
             ),
           ),
-
-          // ── White content from below header to bottom ───────────────
           Positioned(
-            top: topPadding + 70, // sits just below the header
+            top: topPadding + 70,
             left: 0,
             right: 0,
             bottom: 0,
@@ -494,8 +479,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ),
-
-          // ── Header floats on top of everything ─────────────────────
           Positioned(
             top: 0,
             left: 0,
@@ -523,8 +506,6 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
           visibleSchedules: provider.schedules
               .where((s) => _shouldShowOnDate(s, selectedDate))
               .toList(),
-          onEdit: _handleEdit,
-          onDelete: _handleDelete,
           onDateSelected: (date) => setState(() {
             selectedDate = date;
             weekStart = _mondayOf(date);

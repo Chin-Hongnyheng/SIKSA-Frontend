@@ -1,10 +1,14 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:frontend/modals/schedule_modal.dart';
+import 'package:frontend/providers/schedule_provider.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/course_model.dart';
+import '../models/schedule_model.dart';
 import '../providers/course_provider.dart';
 import '../providers/user_provider.dart';
 import '../widgets/center_toast.dart';
@@ -61,6 +65,17 @@ class _CoursesScreenState extends State<CoursesScreen> {
     await context.read<CourseProvider>().loadCourses(role: role);
   }
 
+  void _openCreateModal() {
+    showCreateScheduleModal(
+      context,
+      onSubmit: (_) async {
+        await context.read<ScheduleProvider>().loadSchedules();
+        final role = context.read<UserProvider>().user?.role;
+        await context.read<CourseProvider>().loadCourses(role: role);
+      },
+    );
+  }
+
   List<CourseModel> _filteredCourses(List<CourseModel> courses) {
     final query = _searchText.trim().toLowerCase();
     if (query.isEmpty) return courses;
@@ -72,73 +87,41 @@ class _CoursesScreenState extends State<CoursesScreen> {
     }).toList();
   }
 
-  Future<void> _openCourseEditor({CourseModel? course}) async {
+  /// Opens the schedule modal pre-filled with the course + its first schedule.
+  /// The modal handles calling both courseService and scheduleService internally.
+  /// onSubmit only needs to refresh the providers.
+  Future<void> _openCourseEditor({required CourseModel course}) async {
     final role = context.read<UserProvider>().user?.role;
+    final scheduleProvider = context.read<ScheduleProvider>();
 
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => _CourseEditorSheet(
-        course: course,
-        onSubmit:
-            ({
-              required courseName,
-              required courseCode,
-              required description,
-            }) async {
-              final provider = context.read<CourseProvider>();
+    // Find the first schedule that belongs to this course (may be null).
+    final ScheduleModel? existing = scheduleProvider.schedules
+        .where((s) => s.courseCode == course.courseCode)
+        .firstOrNull;
 
-              if (course == null) {
-                await provider.createCourse(
-                  courseName: courseName,
-                  courseCode: courseCode,
-                  description: description,
-                  role: role,
-                );
-              } else {
-                await provider.editCourse(
-                  courseCode: course.courseCode,
-                  courseName: courseName,
-                  newCourseCode: courseCode,
-                  description: description,
-                  role: role,
-                );
-              }
-
-              if (!mounted) return;
-              await CenterToast.show(
-                context,
-                message: course == null ? 'Course created' : 'Course updated',
-                icon: Icons.check_circle,
-                color: Colors.green,
-              );
-            },
-      ),
+    await showCreateScheduleModal(
+      context,
+      title: 'Edit Course',
+      scheduleId: existing?.scheduleId,
+      initialData: {
+        'courseCode': course.courseCode,
+        'courseName': course.courseName,
+        'description': course.description ?? '',
+        'location': existing?.location ?? '',
+        'startTime': existing?.startTime ?? '',
+        'endTime': existing?.endTime ?? '',
+      },
+      onSubmit: (_) async {
+        // Modal already called the services — just refresh both providers.
+        if (!mounted) return;
+        await scheduleProvider.loadSchedules();
+        await context.read<CourseProvider>().loadCourses(role: role);
+      },
     );
   }
 
   Future<void> _deleteCourse(CourseModel course) async {
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Delete course'),
-            content: Text('Delete ${course.courseCode}?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
+    final confirmed = await _showDeleteConfirmOverlay(course);
     if (!confirmed || !mounted) return;
 
     final role = context.read<UserProvider>().user?.role;
@@ -149,6 +132,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
         role: role,
       );
       if (!mounted) return;
+      await context.read<ScheduleProvider>().loadSchedules();
       await CenterToast.show(
         context,
         message: 'Course deleted',
@@ -164,6 +148,106 @@ class _CoursesScreenState extends State<CoursesScreen> {
         color: Colors.red,
       );
     }
+  }
+
+  Future<bool> _showDeleteConfirmOverlay(CourseModel course) async {
+    final completer = Completer<bool>();
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) => Material(
+        color: Colors.black54,
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.black87,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.delete_outline, color: Colors.red, size: 32),
+                const SizedBox(height: 12),
+                const Text(
+                  'Delete Course',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to delete "${course.courseCode}"?\nThis will also remove all related schedules.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white24,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(true);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    return completer.future;
   }
 
   Future<void> _subscribeCourse(CourseModel course) async {
@@ -206,33 +290,26 @@ class _CoursesScreenState extends State<CoursesScreen> {
     final courseProvider = context.watch<CourseProvider>();
     final user = context.watch<UserProvider>().user;
     final canManage = _canManage(user?.role);
-    // apply search filtering first
     var courses = _filteredCourses(courseProvider.courses);
 
-    // if requested, show only subscribed courses (used by Dashboard -> My Courses)
     if (widget.onlySubscribed) {
       courses = courses.where((c) => c.isSubscribed).toList();
     }
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      floatingActionButton: canManage
-          ? FloatingActionButton.extended(
-              onPressed: () => _openCourseEditor(),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Add'),
-            )
-          : null,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openCreateModal,
+        backgroundColor: AppColors.primary,
+        tooltip: 'Create Schedule',
+        child: const Icon(Icons.add, size: 28),
+      ),
       body: SafeArea(
         top: false,
         child: Column(
           children: [
             _CoursesHeader(
-              title: (widget.onlySubscribed && !canManage)
-                  ? 'Courses'
-                  : 'Courses',
+              title: 'Courses',
               subtitle: canManage ? 'Teacher workspace' : 'Student courses',
               onBackTap: () => context.pop(),
             ),
@@ -299,7 +376,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
                                   ? 'Browse courses'
                                   : 'Refresh'),
                         onActionTap: canManage
-                            ? () => _openCourseEditor()
+                            ? _openCreateModal
                             : (widget.onlySubscribed
                                   ? () => context.push('/courses')
                                   : _loadCoursesForRole),
@@ -325,6 +402,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
                             course: course,
                             canManage: canManage,
                             onTap: () => _openCourseDetails(course),
+                            // ← now passes the required `course:` named param
                             onEdit: () => _openCourseEditor(course: course),
                             onDelete: () => _deleteCourse(course),
                             onSubscribe: () => _subscribeCourse(course),
@@ -342,6 +420,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Header
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _CoursesHeader extends StatelessWidget {
   const _CoursesHeader({
@@ -404,6 +486,10 @@ class _CoursesHeader extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Search field
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _CourseSearchField extends StatelessWidget {
   const _CourseSearchField({required this.controller, required this.onChanged});
 
@@ -429,6 +515,10 @@ class _CourseSearchField extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Summary chip
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _CourseSummary extends StatelessWidget {
   const _CourseSummary({
@@ -498,6 +588,10 @@ class _CourseSummary extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Course list card
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _CourseListCard extends StatelessWidget {
   const _CourseListCard({
@@ -698,6 +792,10 @@ class _CourseListCard extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Small chip
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _CourseChip extends StatelessWidget {
   const _CourseChip({required this.icon, required this.label});
 
@@ -731,184 +829,9 @@ class _CourseChip extends StatelessWidget {
   }
 }
 
-class _CourseEditorSheet extends StatefulWidget {
-  const _CourseEditorSheet({this.course, required this.onSubmit});
-
-  final CourseModel? course;
-  final Future<void> Function({
-    required String courseName,
-    required String courseCode,
-    required String? description,
-  })
-  onSubmit;
-
-  @override
-  State<_CourseEditorSheet> createState() => _CourseEditorSheetState();
-}
-
-class _CourseEditorSheetState extends State<_CourseEditorSheet> {
-  late final TextEditingController _nameController;
-  late final TextEditingController _codeController;
-  late final TextEditingController _descriptionController;
-  bool _isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _nameController = TextEditingController(
-      text: widget.course?.courseName ?? '',
-    );
-    _codeController = TextEditingController(
-      text: widget.course?.courseCode ?? '',
-    );
-    _descriptionController = TextEditingController(
-      text: widget.course?.description ?? '',
-    );
-  }
-
-  @override
-  void dispose() {
-    _nameController.dispose();
-    _codeController.dispose();
-    _descriptionController.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final name = _nameController.text.trim();
-    final code = _codeController.text.trim();
-    final description = _descriptionController.text.trim();
-
-    if (name.isEmpty || code.isEmpty) {
-      await CenterToast.show(
-        context,
-        message: 'Course name and code are required',
-        icon: Icons.error,
-        color: Colors.red,
-      );
-      return;
-    }
-
-    setState(() => _isSubmitting = true);
-
-    try {
-      await widget.onSubmit(
-        courseName: name,
-        courseCode: code,
-        description: description.isEmpty ? null : description,
-      );
-      if (!mounted) return;
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) return;
-      await CenterToast.show(
-        context,
-        message: e.toString().replaceAll('Exception: ', ''),
-        icon: Icons.error,
-        color: Colors.red,
-      );
-    } finally {
-      if (mounted) setState(() => _isSubmitting = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final isEditing = widget.course != null;
-
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-        ),
-        child: Container(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 18),
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-              Text(
-                isEditing ? 'Edit Course' : 'Create Course',
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF1B3B22),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _nameController,
-                decoration: const InputDecoration(
-                  labelText: 'Course Name',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _codeController,
-                decoration: const InputDecoration(
-                  labelText: 'Course Code',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _descriptionController,
-                minLines: 3,
-                maxLines: 5,
-                decoration: const InputDecoration(
-                  labelText: 'Description',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: _isSubmitting ? null : _submit,
-                  icon: _isSubmitting
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Icon(isEditing ? Icons.save_outlined : Icons.add),
-                  label: Text(isEditing ? 'Save Course' : 'Create Course'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    minimumSize: const Size.fromHeight(48),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// Course details bottom sheet (read-only)
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _CourseDetailsSheet extends StatelessWidget {
   const _CourseDetailsSheet({required this.course});
@@ -1026,6 +949,10 @@ class _CourseDetailsSheet extends StatelessWidget {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Status / empty-state panel
+// ─────────────────────────────────────────────────────────────────────────────
+
 class _StatusPanel extends StatelessWidget {
   const _StatusPanel({
     required this.icon,
@@ -1075,6 +1002,10 @@ class _StatusPanel extends StatelessWidget {
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 String _creatorName(String? value) {
   if (value == null || value.isEmpty) return 'Unknown';
