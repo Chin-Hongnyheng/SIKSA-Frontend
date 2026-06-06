@@ -8,11 +8,13 @@ import 'providers/course_provider.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/user_provider.dart';
+import 'providers/attendance_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await AuthProvider.loadTokens();
+
   runApp(
     MultiProvider(
       providers: [
@@ -24,8 +26,9 @@ Future<void> main() async {
           create: (_) => ScheduleProvider()..loadSchedules(),
         ),
         ChangeNotifierProvider(create: (_) => UserProvider()..loadUser()),
+        ChangeNotifierProvider(create: (_) => AttendanceProvider()),
       ],
-      child: MyApp(),
+      child: const MyApp(),
     ),
   );
 }
