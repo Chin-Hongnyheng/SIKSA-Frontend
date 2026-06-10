@@ -298,38 +298,19 @@ class _CoursesScreenState extends State<CoursesScreen> {
 
     return Scaffold(
       backgroundColor: AppColors.background,
-<<<<<<< HEAD
-      floatingActionButton: canManage
-          ? FloatingActionButton.extended(
-              onPressed: () => _openCourseEditor(),
-              backgroundColor: AppColors.primary,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('Create Course'),
-            )
-          : null,
-=======
       floatingActionButton: FloatingActionButton(
         onPressed: _openCreateModal,
         backgroundColor: AppColors.primary,
         tooltip: 'Create Schedule',
         child: const Icon(Icons.add, size: 28),
       ),
->>>>>>> NyhengDev
       body: SafeArea(
         top: false,
         child: Column(
           children: [
             _CoursesHeader(
-<<<<<<< HEAD
-              title: (widget.onlySubscribed && !canManage)
-                  ? 'Courses'
-                  : 'Courses',
-              subtitle: canManage ? 'Teacher workspace' : 'Student workspace',
-=======
               title: 'Courses',
               subtitle: canManage ? 'Teacher workspace' : 'Student courses',
->>>>>>> NyhengDev
               onBackTap: () => context.pop(),
             ),
             Expanded(
@@ -848,7 +829,6 @@ class _CourseChip extends StatelessWidget {
   }
 }
 
-<<<<<<< HEAD
 class _CourseEditorSheet extends StatefulWidget {
   const _CourseEditorSheet({this.course, required this.onSubmit});
 
@@ -1033,11 +1013,6 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
     );
   }
 }
-=======
-// ─────────────────────────────────────────────────────────────────────────────
-// Course details bottom sheet (read-only)
-// ─────────────────────────────────────────────────────────────────────────────
->>>>>>> NyhengDev
 
 class _CourseDetailsSheet extends StatelessWidget {
   const _CourseDetailsSheet({required this.course});
