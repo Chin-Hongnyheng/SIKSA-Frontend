@@ -1,24 +1,43 @@
+import 'dart:async';
+
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../providers/auth_provider.dart';
 
 class AssessmentService {
-  Future<List<dynamic>> getMyAssessments() async {
+  GraphQLClient _authClient() {
     final Link authLink = HttpLink(
       dotenv.env['GRAPHQL_URL']!,
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
-    final GraphQLClient authClient = GraphQLClient(
-      cache: GraphQLCache(),
-      link: authLink,
-    );
+    return GraphQLClient(cache: GraphQLCache(), link: authLink);
+  }
+
+  Exception _exceptionFromResult(QueryResult result) {
+    final error = result.exception.toString();
+
+    if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
+      unawaited(AuthProvider.clearTokens());
+      return Exception('SESSION_EXPIRED');
+    }
+
+    final message = result.exception?.graphqlErrors.isNotEmpty == true
+        ? result.exception!.graphqlErrors.first.message
+        : error;
+
+    return Exception(message);
+  }
+
+  Future<List<dynamic>> getMyAssessments() async {
+    final authClient = _authClient();
 
     const String query = """
       query GetMyAssessments {
         getAllMyAssessments {
           assessmentName
           courseCode
+          guide
           createdBy
           createdAt
         }
@@ -26,35 +45,21 @@ class AssessmentService {
       """;
     final result = await authClient.query(QueryOptions(document: gql(query)));
     if (result.hasException) {
-      final error = result.exception.toString();
-
-      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
-        await AuthProvider.clearTokens();
-
-        throw Exception('SESSION_EXPIRED');
-      }
-
-      throw Exception(error);
+      throw _exceptionFromResult(result);
     }
 
     return result.data!['getAllMyAssessments'];
   }
 
   Future<List<dynamic>> getAssessmentsByCourseCode(String courseCode) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-    final GraphQLClient authClient = GraphQLClient(
-      cache: GraphQLCache(),
-      link: authLink,
-    );
+    final authClient = _authClient();
 
     const String query = """
       query GetAssessmentsByCourseCode(\$courseCode: String!) {
         getAssessmentsByCourseCode(courseCode: \$courseCode) {
           assessmentName
           courseCode
+          guide
           createdBy
           createdAt
         }
@@ -66,33 +71,21 @@ class AssessmentService {
     );
 
     if (result.hasException) {
-      final error = result.exception.toString();
-      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
-        await AuthProvider.clearTokens();
-        throw Exception('SESSION_EXPIRED');
-      }
-      throw Exception(error);
+      throw _exceptionFromResult(result);
     }
 
     return result.data!['getAssessmentsByCourseCode'];
   }
 
   Future<List<dynamic>> getAllMyAssessments() async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
+    final authClient = _authClient();
 
     const String query = """
     query {
       getAllMyAssessments {
         assessmentName
         courseCode
+        guide
         createdBy
         createdAt
       }
@@ -102,12 +95,7 @@ class AssessmentService {
     final result = await authClient.query(QueryOptions(document: gql(query)));
 
     if (result.hasException) {
-      final error = result.exception.toString();
-      if (error.contains("Unauthorized") || error.contains('UNAUTHORIZED')) {
-        await AuthProvider.clearTokens();
-        throw Exception('SESSION_EXPIRED');
-      }
-      throw Exception(error);
+      throw _exceptionFromResult(result);
     }
 
     return result.data!['getAllMyAssessments'];
@@ -116,16 +104,9 @@ class AssessmentService {
   Future<String> createAssessment({
     required String courseCode,
     required String assessmentName,
+    String? guide,
   }) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
+    final authClient = _authClient();
 
     const String mutation = """
       mutation CreateAssessment(\$input: CreateAssessmentInput!) {
@@ -139,18 +120,17 @@ class AssessmentService {
       MutationOptions(
         document: gql(mutation),
         variables: {
-          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
+          "input": {
+            "courseCode": courseCode,
+            "assessmentName": assessmentName,
+            "guide": guide,
+          },
         },
       ),
     );
 
     if (result.hasException) {
-      final error = result.exception.toString();
-      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
-        await AuthProvider.clearTokens();
-        throw Exception('SESSION_EXPIRED');
-      }
-      throw Exception(error);
+      throw _exceptionFromResult(result);
     }
 
     return result.data!['createAssessment']['message'];
@@ -160,15 +140,7 @@ class AssessmentService {
     required String courseCode,
     required String assessmentName,
   }) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
+    final authClient = _authClient();
 
     const String mutation = """
       mutation DeleteAssessment(\$input: DeleteAssessmentInput!) {
@@ -188,12 +160,7 @@ class AssessmentService {
     );
 
     if (result.hasException) {
-      final error = result.exception.toString();
-      if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
-        await AuthProvider.clearTokens();
-        throw Exception('SESSION_EXPIRED');
-      }
-      throw Exception(error);
+      throw _exceptionFromResult(result);
     }
 
     return result.data!['deleteAssessment']['message'];

@@ -322,6 +322,7 @@ class GraphQLService {
       getAllMyAssessments {
         assessmentName
         courseCode
+        guide
         createdBy
         createdAt
       }
@@ -360,6 +361,7 @@ class GraphQLService {
       getAssessmentsByCourseCode(courseCode: \$courseCode) {
         assessmentName
         courseCode
+        guide
         createdBy
         createdAt
       }
@@ -383,6 +385,7 @@ class GraphQLService {
   Future<String> createAssessment({
     required String courseCode,
     required String assessmentName,
+    String? guide,
   }) async {
     final Link authLink = HttpLink(
       dotenv.env['GRAPHQL_URL']!,
@@ -406,7 +409,11 @@ class GraphQLService {
       MutationOptions(
         document: gql(mutation),
         variables: {
-          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
+          "input": {
+            "courseCode": courseCode,
+            "assessmentName": assessmentName,
+            "guide": guide,
+          },
         },
       ),
     );

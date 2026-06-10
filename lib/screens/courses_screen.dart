@@ -222,7 +222,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               icon: const Icon(Icons.add_rounded),
-              label: const Text('Add'),
+              label: const Text('Create Course'),
             )
           : null,
       body: SafeArea(
@@ -233,7 +233,7 @@ class _CoursesScreenState extends State<CoursesScreen> {
               title: (widget.onlySubscribed && !canManage)
                   ? 'Courses'
                   : 'Courses',
-              subtitle: canManage ? 'Teacher workspace' : 'Student courses',
+              subtitle: canManage ? 'Teacher workspace' : 'Student workspace',
               onBackTap: () => context.pop(),
             ),
             Expanded(
@@ -855,6 +855,8 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
                 controller: _nameController,
                 decoration: const InputDecoration(
                   labelText: 'Course Name',
+                  hintText: 'e.g. Introduction to Programming',
+                  hintStyle: TextStyle(color: AppColors.caption),
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -863,6 +865,8 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
                 controller: _codeController,
                 decoration: const InputDecoration(
                   labelText: 'Course Code',
+                  hintText: 'e.g. CS101',
+                  hintStyle: TextStyle(color: AppColors.caption),
                   border: OutlineInputBorder(),
                 ),
               ),
@@ -873,6 +877,8 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
                 maxLines: 5,
                 decoration: const InputDecoration(
                   labelText: 'Description',
+                  hintText: 'e.g. Brief summary of topics and objectives',
+                  hintStyle: TextStyle(color: AppColors.caption),
                   border: OutlineInputBorder(),
                 ),
               ),

@@ -1,3 +1,5 @@
+// ignore_for_file: unnecessary_underscores, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
@@ -39,7 +41,10 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
     if (!mounted) return;
 
     final role = userProvider.user?.role;
-    await context.read<CourseProvider>().loadCourses(role: role);
+    await Future.wait([
+      context.read<CourseProvider>().loadCourses(role: role),
+      context.read<AssessmentProvider>().loadAllAssessments(),
+    ]);
 
     final normalizedRole = role?.trim().toLowerCase();
     if (normalizedRole == 'teacher' || normalizedRole == 'admin') {
@@ -61,7 +66,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
     final courseProvider = context.watch<CourseProvider>();
     final courses = courseProvider.courses;
     final schedules = context.watch<ScheduleProvider>().schedules;
-    final assessments = context.watch<AssessmentProvider>().assessments;
+    final assessments = context.watch<AssessmentProvider>().allAssessments;
     final totalStudents = courseProvider.teacherStudentCount;
     final myCourseCount = widget.isStudentDashboard
         ? courses.where((course) => course.isSubscribed).length
@@ -181,6 +186,9 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                       title: 'My Assessments',
                       value: assessments.length.toString(),
                       color: Colors.yellow,
+                      onTap: () {
+                        context.push('/assessments');
+                      },
                     ),
                   ),
                 ],
@@ -244,7 +252,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                       ),
                       title: 'Assessments',
                       onTap: () {
-                        context.push('assessments');
+                        context.push('/assessments');
                       },
                     ),
                   ),

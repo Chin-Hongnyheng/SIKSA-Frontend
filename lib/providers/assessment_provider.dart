@@ -22,7 +22,9 @@ class AssessmentProvider extends ChangeNotifier {
       final result = await _assessmentService.getAssessmentsByCourseCode(
         courseCode,
       );
-      _assessments = result.map((e) => AssessmentModel.fromMap(e)).toList();
+      _assessments = result
+          .map((e) => AssessmentModel.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       error = e.toString();
     } finally {
@@ -39,7 +41,9 @@ class AssessmentProvider extends ChangeNotifier {
     notifyListeners();
     try {
       final result = await _assessmentService.getAllMyAssessments();
-      _allAssessments = result.map((e) => AssessmentModel.fromMap(e)).toList();
+      _allAssessments = result
+          .map((e) => AssessmentModel.fromMap(Map<String, dynamic>.from(e)))
+          .toList();
     } catch (e) {
       error = e.toString();
     } finally {
@@ -55,21 +59,45 @@ class AssessmentProvider extends ChangeNotifier {
 
   void addAssessment(AssessmentModel assessment) {
     _assessments.add(assessment);
+    _allAssessments.add(assessment);
     notifyListeners();
   }
 
-  void removeAssessment(String assessmentId) {
-    _assessments.removeWhere((e) => assessmentId == assessmentId);
+  void removeAssessment({
+    required String courseCode,
+    required String assessmentName,
+  }) {
+    _assessments.removeWhere(
+      (e) => e.courseCode == courseCode && e.assessmentName == assessmentName,
+    );
+    _allAssessments.removeWhere(
+      (e) => e.courseCode == courseCode && e.assessmentName == assessmentName,
+    );
     notifyListeners();
   }
 
   Future<void> createAssessment({
     required String courseCode,
     required String assessmentName,
-  }) async {}
+    String? guide,
+  }) async {
+    await _assessmentService.createAssessment(
+      courseCode: courseCode,
+      assessmentName: assessmentName,
+      guide: guide,
+    );
+    await loadAllAssessments();
+  }
 
   Future<void> deleteAssessment({
     required String courseCode,
     required String assessmentName,
-  }) async {}
+  }) async {
+    await _assessmentService.deleteAssessment(
+      courseCode: courseCode,
+      assessmentName: assessmentName,
+    );
+    removeAssessment(courseCode: courseCode, assessmentName: assessmentName);
+    await loadAllAssessments();
+  }
 }
