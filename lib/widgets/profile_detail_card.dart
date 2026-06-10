@@ -86,7 +86,7 @@ class ProfileDetailCard extends StatelessWidget {
             _buildField(
               icon: Icons.phone,
               label: 'Phone',
-              value: user?['phone'] != null ? '+${user!['phone']}' : null,
+              value: user?['phone'] != null ? '${user!['phone']}' : null,
               fieldKey: 'phone',
               isEditable: false,
             ),

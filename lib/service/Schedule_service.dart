@@ -14,7 +14,6 @@ class ScheduleService {
 
   Future<String> createSchedule({
     required String courseCode,
-    required String assessmentName,
     required String location,
     required String startTime,
     required String endTime,
@@ -42,7 +41,6 @@ class ScheduleService {
         variables: {
           "input": {
             "courseCode": courseCode,
-            "assessmentName": assessmentName,
             "location": location,
             "startTime": startTime,
             "endTime": endTime,
@@ -110,7 +108,6 @@ class ScheduleService {
   Future<String> editSchedule({
     required String scheduleId,
     required String courseCode,
-    required String assessmentName,
     required String location,
     required String startTime,
     required String endTime,
@@ -139,7 +136,6 @@ class ScheduleService {
           "input": {
             "scheduleId": scheduleId,
             "courseCode": courseCode,
-            "assessmentName": assessmentName,
             "location": location,
             "startTime": startTime,
             "endTime": endTime,
@@ -178,7 +174,6 @@ class ScheduleService {
         getMySchedules {
           scheduleId
           courseCode
-          assessmentName
           location
           startTime
           endTime
