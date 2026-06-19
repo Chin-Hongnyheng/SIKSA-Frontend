@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, unnecessary_null_comparison, unnecessary_non_null_assertion, unnecessary_underscores
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'dart:math';

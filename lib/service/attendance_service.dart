@@ -2,12 +2,16 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import '../models/attendance_session_model.dart';
 import '../models/attendance_record_model.dart';
+import '../core/utils/api_helper.dart';
 
 class AttendanceService {
-  static const String baseUrl = "http://127.0.0.1:3000/graphql";
+  static final String baseUrl = ApiHelper.resolveUrl(
+    dotenv.env['GRAPHQL_URL'] ?? "http://127.0.0.1:3000/graphql",
+  );
 
   static const String defaultCourseId = "course1";
 
@@ -21,13 +25,8 @@ class AttendanceService {
     final response = await http
         .post(
           Uri.parse(baseUrl),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "query": query,
-            "variables": variables ?? {},
-          }),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"query": query, "variables": variables ?? {}}),
         )
         .timeout(const Duration(seconds: 25));
 
@@ -59,14 +58,8 @@ class AttendanceService {
 
   Future<List<Map<String, dynamic>>> getCourses() async {
     return [
-      {
-        "_id": "course1",
-        "name": "Mobile",
-      },
-      {
-        "_id": "course2",
-        "name": "Web",
-      },
+      {"_id": "course1", "name": "Mobile"},
+      {"_id": "course2", "name": "Web"},
     ];
   }
 
@@ -74,18 +67,9 @@ class AttendanceService {
     String courseId,
   ) async {
     return [
-      {
-        "_id": "student1",
-        "userName": "student1",
-      },
-      {
-        "_id": "student2",
-        "userName": "student2",
-      },
-      {
-        "_id": "student3",
-        "userName": "student3",
-      },
+      {"_id": "student1", "userName": "student1"},
+      {"_id": "student2", "userName": "student2"},
+      {"_id": "student3", "userName": "student3"},
     ];
   }
 
@@ -165,9 +149,7 @@ class AttendanceService {
 
     final data = await _postGraphQL(
       query: mutation,
-      variables: {
-        "sessionId": sessionId,
-      },
+      variables: {"sessionId": sessionId},
     );
 
     final result = data["refreshAttendanceSessionPassword"];
@@ -203,18 +185,18 @@ class AttendanceService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "courseId": courseId,
-      },
+      variables: {"courseId": courseId},
     );
 
     final result = data["attendanceSessionsByCourse"];
 
     if (result is List) {
       return result
-          .map((item) => AttendanceSessionModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
+          .map(
+            (item) => AttendanceSessionModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList();
     }
 
@@ -230,9 +212,7 @@ class AttendanceService {
 
     final data = await _postGraphQL(
       query: mutation,
-      variables: {
-        "sessionId": sessionId,
-      },
+      variables: {"sessionId": sessionId},
     );
 
     return data["deleteAttendanceSession"] == true;
@@ -260,18 +240,18 @@ class AttendanceService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "sessionId": sessionId,
-      },
+      variables: {"sessionId": sessionId},
     );
 
     final result = data["sessionAttendance"];
 
     if (result is List) {
       return result
-          .map((item) => AttendanceRecordModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
+          .map(
+            (item) => AttendanceRecordModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList();
     }
 
@@ -300,18 +280,18 @@ class AttendanceService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "studentId": studentId,
-      },
+      variables: {"studentId": studentId},
     );
 
     final result = data["studentAttendance"];
 
     if (result is List) {
       return result
-          .map((item) => AttendanceRecordModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
+          .map(
+            (item) => AttendanceRecordModel.fromJson(
+              Map<String, dynamic>.from(item as Map),
+            ),
+          )
           .toList();
     }
 

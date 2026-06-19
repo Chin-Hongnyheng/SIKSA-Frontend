@@ -2,6 +2,7 @@
 
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../core/utils/api_helper.dart';
 import '../providers/auth_provider.dart';
 
 class GraphQLService {
@@ -11,7 +12,9 @@ class GraphQLService {
   String? refreshToken;
 
   GraphQLService() {
-    final HttpLink httpLink = HttpLink(dotenv.env['GRAPHQL_URL']!);
+    final HttpLink httpLink = HttpLink(
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
+    );
     client = GraphQLClient(link: httpLink, cache: GraphQLCache());
   }
 
@@ -97,7 +100,7 @@ class GraphQLService {
 
   Future<Map<String, dynamic>> me() async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
@@ -252,7 +255,7 @@ class GraphQLService {
     required String language,
   }) async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
     final GraphQLClient client = GraphQLClient(
@@ -308,7 +311,7 @@ class GraphQLService {
 
   Future<List<Map<String, dynamic>>> getAllMyAssessments() async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
@@ -345,7 +348,7 @@ class GraphQLService {
     required String courseCode,
   }) async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
@@ -388,7 +391,7 @@ class GraphQLService {
     String? guide,
   }) async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
@@ -434,7 +437,7 @@ class GraphQLService {
     required String assessmentName,
   }) async {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 

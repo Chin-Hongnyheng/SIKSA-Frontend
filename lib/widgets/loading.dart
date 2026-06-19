@@ -10,6 +10,7 @@ class LoadingOverlay {
       builder: (context) => Stack(
         children: [
           // grey background
+          // ignore: deprecated_member_use
           Container(color: Colors.black.withOpacity(0.4)),
 
           // spinner

@@ -80,11 +80,17 @@ class AssessmentProvider extends ChangeNotifier {
     required String courseCode,
     required String assessmentName,
     String? guide,
+    String? icon,
+    String? color,
+    String? imageBase64,
   }) async {
     await _assessmentService.createAssessment(
       courseCode: courseCode,
       assessmentName: assessmentName,
       guide: guide,
+      icon: icon,
+      color: color,
+      imageBase64: imageBase64,
     );
     await loadAllAssessments();
   }

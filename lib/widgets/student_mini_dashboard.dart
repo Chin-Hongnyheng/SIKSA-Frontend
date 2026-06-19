@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 
 import '../core/graphql/api_service.dart';
@@ -42,8 +44,9 @@ class _StudentMiniDashboardState extends State<StudentMiniDashboard> {
     });
 
     try {
-      final recordData =
-          await ApiService.getStudentAttendanceRecords(widget.studentId);
+      final recordData = await ApiService.getStudentAttendanceRecords(
+        widget.studentId,
+      );
 
       int p = 0;
       int l = 0;
@@ -51,7 +54,8 @@ class _StudentMiniDashboardState extends State<StudentMiniDashboard> {
       int per = 0;
 
       for (final record in recordData) {
-        final status = record["status"]?.toString().toLowerCase() ??
+        final status =
+            record["status"]?.toString().toLowerCase() ??
             record["type"]?.toString().toLowerCase() ??
             "";
 
@@ -91,19 +95,14 @@ class _StudentMiniDashboardState extends State<StudentMiniDashboard> {
     if (isLoading) {
       return const Padding(
         padding: EdgeInsets.all(24),
-        child: Center(
-          child: CircularProgressIndicator(),
-        ),
+        child: Center(child: CircularProgressIndicator()),
       );
     }
 
     if (errorMessage != null) {
       return Padding(
         padding: const EdgeInsets.all(12),
-        child: Text(
-          errorMessage!,
-          style: const TextStyle(color: Colors.red),
-        ),
+        child: Text(errorMessage!, style: const TextStyle(color: Colors.red)),
       );
     }
 
@@ -112,10 +111,7 @@ class _StudentMiniDashboardState extends State<StudentMiniDashboard> {
       children: [
         Text(
           widget.studentName,
-          style: const TextStyle(
-            fontWeight: FontWeight.bold,
-            fontSize: 18,
-          ),
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
         ),
         const SizedBox(height: 14),
         GridView.count(

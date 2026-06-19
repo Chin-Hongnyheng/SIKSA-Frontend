@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, unnecessary_non_null_assertion, unnecessary_null_comparison, curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/schedule_model.dart';

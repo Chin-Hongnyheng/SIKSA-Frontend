@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../core/utils/api_helper.dart';
 import '../providers/auth_provider.dart';
 
 class CourseService {
   GraphQLClient _authClient() {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 

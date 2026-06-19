@@ -2,10 +2,14 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../utils/api_helper.dart';
 
 class ApiService {
   // For Chrome and LDPlayer with adb reverse tcp:3000 tcp:3000
-  static const String baseUrl = "http://127.0.0.1:3000/graphql";
+  static final String baseUrl = ApiHelper.resolveUrl(
+    dotenv.env['GRAPHQL_URL'] ?? "http://127.0.0.1:3000/graphql",
+  );
 
   static const String defaultCourseId = "course1";
 
@@ -19,13 +23,8 @@ class ApiService {
     final response = await http
         .post(
           Uri.parse(baseUrl),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "query": query,
-            "variables": variables ?? {},
-          }),
+          headers: {"Content-Type": "application/json"},
+          body: jsonEncode({"query": query, "variables": variables ?? {}}),
         )
         .timeout(const Duration(seconds: 25));
 
@@ -58,14 +57,8 @@ class ApiService {
   // Temporary course list until real course API is connected.
   static Future<List<dynamic>> getCourses() async {
     return [
-      {
-        "_id": "course1",
-        "name": "Mobile",
-      },
-      {
-        "_id": "course2",
-        "name": "Web",
-      },
+      {"_id": "course1", "name": "Mobile"},
+      {"_id": "course2", "name": "Web"},
     ];
   }
 
@@ -145,9 +138,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: mutation,
-      variables: {
-        "sessionId": sessionId,
-      },
+      variables: {"sessionId": sessionId},
     );
 
     final result = data["refreshAttendanceSessionPassword"];
@@ -183,9 +174,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "courseId": courseId,
-      },
+      variables: {"courseId": courseId},
     );
 
     final result = data["attendanceSessionsByCourse"];
@@ -217,9 +206,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "sessionId": sessionId,
-      },
+      variables: {"sessionId": sessionId},
     );
 
     final result = data["sessionAttendance"];
@@ -253,9 +240,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "studentId": studentId,
-      },
+      variables: {"studentId": studentId},
     );
 
     final result = data["studentAttendance"];
@@ -283,9 +268,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "studentId": studentId,
-      },
+      variables: {"studentId": studentId},
     );
 
     final result = data["studentAttendanceSummary"];
@@ -294,12 +277,7 @@ class ApiService {
       return result;
     }
 
-    return {
-      "present": 0,
-      "late": 0,
-      "absent": 0,
-      "permission": 0,
-    };
+    return {"present": 0, "late": 0, "absent": 0, "permission": 0};
   }
 
   static Future<List<dynamic>> getCourseAttendance(String courseId) async {
@@ -322,9 +300,7 @@ class ApiService {
 
     final data = await _postGraphQL(
       query: query,
-      variables: {
-        "courseId": courseId,
-      },
+      variables: {"courseId": courseId},
     );
 
     final result = data["courseAttendance"];
@@ -381,18 +357,9 @@ class ApiService {
   static Future<List<dynamic>> getStudentsFromCourse(String courseId) async {
     // Temporary student list until your real Students API is connected.
     return [
-      {
-        "_id": "student1",
-        "userName": "student1",
-      },
-      {
-        "_id": "student2",
-        "userName": "student2",
-      },
-      {
-        "_id": "student3",
-        "userName": "student3",
-      },
+      {"_id": "student1", "userName": "student1"},
+      {"_id": "student2", "userName": "student2"},
+      {"_id": "student3", "userName": "student3"},
     ];
   }
 }

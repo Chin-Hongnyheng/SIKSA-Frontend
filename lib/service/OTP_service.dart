@@ -3,9 +3,10 @@
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../core/utils/api_helper.dart';
 
 class ApiService {
-  static final String baseUrl = dotenv.env['BASE_URL']!;
+  static final String baseUrl = ApiHelper.resolveUrl(dotenv.env['BASE_URL']!);
 
   /// Send OTP to email
   static Future<void> sendOtp(String email) async {

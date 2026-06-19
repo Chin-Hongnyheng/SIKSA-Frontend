@@ -1,6 +1,9 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: unused_local_variable, deprecated_member_use, use_build_context_synchronously
 
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
@@ -35,31 +38,42 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) => CreateAssessmentModal(
-        onCreate: (course, name, guide) async {
-          LoadingOverlay.show(context);
-          try {
-            await context.read<AssessmentProvider>().createAssessment(
-              courseCode: course,
-              assessmentName: name,
-              guide: guide,
-            );
-            await CenterToast.show(
-              context,
-              message: 'Assessment created',
-              icon: Icons.check_circle,
-              color: Colors.green,
-            );
-          } catch (e) {
-            await CenterToast.show(
-              context,
-              message: _toReadableError(e.toString()),
-              icon: Icons.error,
-              color: Colors.red,
-            );
-          } finally {
-            LoadingOverlay.hide();
-          }
-        },
+        onCreate:
+            (
+              course,
+              name,
+              guide, {
+              String? icon,
+              String? color,
+              String? imageBase64,
+            }) async {
+              LoadingOverlay.show(context);
+              try {
+                await context.read<AssessmentProvider>().createAssessment(
+                  courseCode: course,
+                  assessmentName: name,
+                  guide: guide,
+                  icon: icon,
+                  color: color,
+                  imageBase64: imageBase64,
+                );
+                await CenterToast.show(
+                  context,
+                  message: 'Assessment created',
+                  icon: Icons.check_circle,
+                  color: Colors.green,
+                );
+              } catch (e) {
+                await CenterToast.show(
+                  context,
+                  message: _toReadableError(e.toString()),
+                  icon: Icons.error,
+                  color: Colors.red,
+                );
+              } finally {
+                LoadingOverlay.hide();
+              }
+            },
       ),
     );
   }
@@ -68,25 +82,10 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     String courseCode,
     String assessmentName,
   ) async {
-    final confirmed =
-        await showDialog<bool>(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Delete assessment'),
-            content: Text('Delete "$assessmentName" for $courseCode?'),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
+    final confirmed = await _showDeleteConfirmOverlay(
+      courseCode,
+      assessmentName,
+    );
 
     if (!confirmed) return;
 
@@ -114,12 +113,139 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     }
   }
 
+  Future<bool> _showDeleteConfirmOverlay(
+    String courseCode,
+    String assessmentName,
+  ) async {
+    final completer = Completer<bool>();
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) => Material(
+        color: Colors.black.withOpacity(0.4),
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                  size: 36,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Delete Assessment',
+                  style: TextStyle(
+                    color: Color(0xFF1B3B22),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to delete "$assessmentName" for $courseCode?',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF607064),
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5ECE7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Color(0xFF4F5F55),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(true);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    return completer.future;
+  }
+
   void _showAssessmentDetails(AssessmentModel assessment) {
+    final user = context.read<UserProvider>().user;
+    final role = user?.role ?? 'Unknown';
+    final canManage = role == 'Teacher' || role == 'Admin';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _AssessmentDetailsSheet(assessment: assessment),
+      builder: (ctx) => _AssessmentDetailsSheet(
+        assessment: assessment,
+        canManage: canManage,
+        onDelete: () =>
+            _deleteAssessment(assessment.courseCode, assessment.assessmentName),
+      ),
     );
   }
 
@@ -220,10 +346,6 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                             assessment: assessment,
                             canManage: canManage,
                             onTap: () => _showAssessmentDetails(assessment),
-                            onDelete: () => _deleteAssessment(
-                              assessment.courseCode,
-                              assessment.assessmentName,
-                            ),
                           ),
                         ),
                       ),
@@ -468,10 +590,38 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
+String getDetailsHeader(String? iconKey) {
+  switch (iconKey?.toLowerCase()) {
+    case 'lecture':
+      return 'Lecture Notes';
+    case 'lab':
+      return 'Lab Instructions';
+    case 'midterm':
+    case 'final':
+      return 'Exam Details';
+    case 'quiz':
+      return 'Quiz Instructions';
+    case 'assignment':
+      return 'Assignment Guidelines';
+    case 'project':
+      return 'Project Guidelines';
+    case 'presentation':
+      return 'Presentation Guidelines';
+    default:
+      return 'Instructions & Details';
+  }
+}
+
 class _AssessmentDetailsSheet extends StatelessWidget {
-  const _AssessmentDetailsSheet({required this.assessment});
+  const _AssessmentDetailsSheet({
+    required this.assessment,
+    required this.canManage,
+    this.onDelete,
+  });
 
   final AssessmentModel assessment;
+  final bool canManage;
+  final VoidCallback? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -483,21 +633,27 @@ class _AssessmentDetailsSheet extends StatelessWidget {
         ? '--'
         : DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
 
+    final accentColor = assessmentColorFromHex(assessment.color);
+    final iconData = assessmentIconFromKey(assessment.icon);
+    final hasImage =
+        assessment.imageBase64 != null && assessment.imageBase64!.isNotEmpty;
+
     return SafeArea(
       child: Container(
         constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.84,
+          maxHeight: MediaQuery.of(context).size.height * 0.88,
         ),
         padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
         decoration: const BoxDecoration(
           color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
         ),
         child: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
+              // ── Drag handle ──
               Center(
                 child: Container(
                   width: 44,
@@ -509,20 +665,19 @@ class _AssessmentDetailsSheet extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 18),
+
+              // ── Header: Icon + Title ──
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Container(
-                    width: 46,
-                    height: 46,
+                    width: 50,
+                    height: 50,
                     decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.12),
+                      color: accentColor.withOpacity(0.12),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
-                      Icons.description_outlined,
-                      color: AppColors.primary,
-                    ),
+                    child: Icon(iconData, color: accentColor, size: 26),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -554,32 +709,112 @@ class _AssessmentDetailsSheet extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 18),
+
+              // ── Image ──
+              if (hasImage) ...[
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Image.memory(
+                    base64Decode(assessment.imageBase64!),
+                    width: double.infinity,
+                    height: 180,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                const SizedBox(height: 18),
+              ],
+
+              // ── Created date ──
               _DetailRow(
                 icon: Icons.event_outlined,
                 label: 'Created',
                 value: dateLabel,
+                accentColor: accentColor,
               ),
               const SizedBox(height: 18),
-              const Text(
-                'Guide',
-                style: TextStyle(
+
+              // ── Dynamic Header based on Type ──
+              Text(
+                getDetailsHeader(assessment.icon),
+                style: const TextStyle(
                   color: Color(0xFF1B3B22),
                   fontSize: 18,
                   fontWeight: FontWeight.w800,
                 ),
               ),
               const SizedBox(height: 8),
-              Text(
-                guide != null && guide.isNotEmpty
-                    ? guide
-                    : 'No guide has been added for this assessment yet.',
-                style: const TextStyle(
-                  color: Color(0xFF4F5F55),
-                  fontSize: 15,
-                  height: 1.45,
-                  fontWeight: FontWeight.w500,
+              if (guide != null && guide.isNotEmpty)
+                MarkdownBody(
+                  data: guide,
+                  styleSheet: MarkdownStyleSheet(
+                    p: const TextStyle(
+                      color: Color(0xFF4F5F55),
+                      fontSize: 15,
+                      height: 1.45,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    h1: TextStyle(
+                      color: accentColor,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                    ),
+                    h2: TextStyle(
+                      color: accentColor,
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                    ),
+                    strong: const TextStyle(
+                      color: Color(0xFF1B3B22),
+                      fontWeight: FontWeight.w800,
+                    ),
+                    em: const TextStyle(
+                      color: Color(0xFF607064),
+                      fontStyle: FontStyle.italic,
+                    ),
+                    listBullet: TextStyle(
+                      color: accentColor,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                )
+              else
+                const Text(
+                  'No information has been added for this assessment yet.',
+                  style: TextStyle(
+                    color: Color(0xFF4F5F55),
+                    fontSize: 15,
+                    height: 1.45,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
+
+              // ── Delete button ──
+              if (canManage) ...[
+                const SizedBox(height: 32),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      onDelete?.call();
+                    },
+                    icon: const Icon(Icons.delete_outline_rounded),
+                    label: const Text(
+                      'Delete Assessment',
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                      overlayColor: Colors.red.withOpacity(0.08),
+                      side: const BorderSide(color: Colors.red),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -593,20 +828,23 @@ class _DetailRow extends StatelessWidget {
     required this.icon,
     required this.label,
     required this.value,
+    this.accentColor,
   });
 
   final IconData icon;
   final String label;
   final String value;
+  final Color? accentColor;
 
   @override
   Widget build(BuildContext context) {
+    final color = accentColor ?? AppColors.primary;
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: AppColors.primary, size: 20),
+          Icon(icon, color: color, size: 20),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
@@ -643,13 +881,11 @@ class _AssessmentCard extends StatelessWidget {
     required this.assessment,
     required this.canManage,
     required this.onTap,
-    required this.onDelete,
   });
 
   final AssessmentModel assessment;
   final bool canManage;
   final VoidCallback onTap;
-  final VoidCallback onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -661,6 +897,10 @@ class _AssessmentCard extends StatelessWidget {
         : DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
 
     final guide = assessment.guide?.trim() ?? '';
+    final accentColor = assessmentColorFromHex(assessment.color);
+    final iconData = assessmentIconFromKey(assessment.icon);
+    final hasImage =
+        assessment.imageBase64 != null && assessment.imageBase64!.isNotEmpty;
 
     return Material(
       color: Colors.white,
@@ -669,93 +909,105 @@ class _AssessmentCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(16),
         child: Container(
-          padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: const Color(0xFFE5ECE7)),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.description_outlined,
-                  color: AppColors.primary,
-                  size: 23,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title.isNotEmpty ? title : 'Untitled assessment',
-                      style: const TextStyle(
-                        color: Color(0xFF1F2D22),
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                      ),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // ── Color accent bar ──
+                Container(
+                  width: 5,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      bottomLeft: Radius.circular(16),
                     ),
-                    const SizedBox(height: 5),
-                    Text(
-                      courseCode.isNotEmpty
-                          ? 'Course: $courseCode'
-                          : 'Course not set',
-                      style: const TextStyle(
-                        color: Color(0xFF607064),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 13.5,
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      'Created: $dateLabel',
-                      style: const TextStyle(
-                        color: Color(0xFF77887D),
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12.5,
-                      ),
-                    ),
-                    if (guide.isNotEmpty) ...[
-                      const SizedBox(height: 6),
-                      Text(
-                        guide,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Color(0xFF4F5F55),
-                          fontWeight: FontWeight.w500,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-              if (canManage)
-                IconButton(
-                  onPressed: onDelete,
-                  tooltip: 'Delete',
-                  icon: const Icon(
-                    Icons.delete_outline_rounded,
-                    color: Colors.red,
                   ),
                 ),
-              const Padding(
-                padding: EdgeInsets.only(top: 10),
-                child: Icon(
-                  Icons.chevron_right_rounded,
-                  color: Color(0xFF98A49C),
+                // ── Card body ──
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: accentColor.withOpacity(0.12),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(iconData, color: accentColor, size: 23),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title.isNotEmpty
+                                    ? title
+                                    : 'Untitled assessment',
+                                style: const TextStyle(
+                                  color: Color(0xFF1F2D22),
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
+                              const SizedBox(height: 5),
+                              Text(
+                                courseCode.isNotEmpty
+                                    ? 'Course: $courseCode'
+                                    : 'Course not set',
+                                style: const TextStyle(
+                                  color: Color(0xFF607064),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 13.5,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                'Created: $dateLabel',
+                                style: const TextStyle(
+                                  color: Color(0xFF77887D),
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 12.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        if (hasImage)
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8),
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.memory(
+                                base64Decode(assessment.imageBase64!),
+                                width: 48,
+                                height: 48,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
+                          ),
+                        const Padding(
+                          padding: EdgeInsets.only(top: 10),
+                          child: Icon(
+                            Icons.chevron_right_rounded,
+                            color: Color(0xFF98A49C),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 
 class AttendanceRow extends StatelessWidget {
@@ -69,28 +71,19 @@ class AttendanceRow extends StatelessWidget {
               Column(
                 children: [
                   Text(checkIn),
-                  const Text(
-                    "Check in",
-                    style: TextStyle(fontSize: 10),
-                  ),
+                  const Text("Check in", style: TextStyle(fontSize: 10)),
                 ],
               ),
               Column(
                 children: [
                   Text(checkOut),
-                  const Text(
-                    "Check out",
-                    style: TextStyle(fontSize: 10),
-                  ),
+                  const Text("Check out", style: TextStyle(fontSize: 10)),
                 ],
               ),
               Column(
                 children: [
                   Text(totalHours),
-                  const Text(
-                    "Total Hours",
-                    style: TextStyle(fontSize: 10),
-                  ),
+                  const Text("Total Hours", style: TextStyle(fontSize: 10)),
                 ],
               ),
             ],

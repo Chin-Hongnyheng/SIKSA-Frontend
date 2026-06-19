@@ -1,3 +1,5 @@
+// ignore_for_file: deprecated_member_use, curly_braces_in_flow_control_structures, use_build_context_synchronously
+
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';

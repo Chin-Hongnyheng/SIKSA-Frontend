@@ -2,12 +2,13 @@ import 'dart:async';
 
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../core/utils/api_helper.dart';
 import '../providers/auth_provider.dart';
 
 class AssessmentService {
   GraphQLClient _authClient() {
     final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
       defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
     );
 
@@ -29,17 +30,25 @@ class AssessmentService {
     return Exception(message);
   }
 
+  static const String _assessmentFields = '''
+    assessmentName
+    courseCode
+    guide
+    icon
+    color
+    imageBase64
+    createdBy
+    createdAt
+  ''';
+
   Future<List<dynamic>> getMyAssessments() async {
     final authClient = _authClient();
 
-    const String query = """
+    final String query =
+        """
       query GetMyAssessments {
         getAllMyAssessments {
-          assessmentName
-          courseCode
-          guide
-          createdBy
-          createdAt
+          $_assessmentFields
         }
       }       
       """;
@@ -54,14 +63,11 @@ class AssessmentService {
   Future<List<dynamic>> getAssessmentsByCourseCode(String courseCode) async {
     final authClient = _authClient();
 
-    const String query = """
+    final String query =
+        """
       query GetAssessmentsByCourseCode(\$courseCode: String!) {
         getAssessmentsByCourseCode(courseCode: \$courseCode) {
-          assessmentName
-          courseCode
-          guide
-          createdBy
-          createdAt
+          $_assessmentFields
         }
       }
     """;
@@ -80,14 +86,11 @@ class AssessmentService {
   Future<List<dynamic>> getAllMyAssessments() async {
     final authClient = _authClient();
 
-    const String query = """
+    final String query =
+        """
     query {
       getAllMyAssessments {
-        assessmentName
-        courseCode
-        guide
-        createdBy
-        createdAt
+        $_assessmentFields
       }
     }
   """;
@@ -105,6 +108,9 @@ class AssessmentService {
     required String courseCode,
     required String assessmentName,
     String? guide,
+    String? icon,
+    String? color,
+    String? imageBase64,
   }) async {
     final authClient = _authClient();
 
@@ -116,17 +122,20 @@ class AssessmentService {
       }
     """;
 
+    final Map<String, dynamic> input = {
+      "courseCode": courseCode,
+      "assessmentName": assessmentName,
+      "guide": guide,
+    };
+
+    if (icon != null && icon.isNotEmpty) input["icon"] = icon;
+    if (color != null && color.isNotEmpty) input["color"] = color;
+    if (imageBase64 != null && imageBase64.isNotEmpty) {
+      input["imageBase64"] = imageBase64;
+    }
+
     final result = await authClient.mutate(
-      MutationOptions(
-        document: gql(mutation),
-        variables: {
-          "input": {
-            "courseCode": courseCode,
-            "assessmentName": assessmentName,
-            "guide": guide,
-          },
-        },
-      ),
+      MutationOptions(document: gql(mutation), variables: {"input": input}),
     );
 
     if (result.hasException) {
