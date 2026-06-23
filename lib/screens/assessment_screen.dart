@@ -10,11 +10,17 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/assessment_model.dart';
+import '../models/assessment_folder_model.dart';
 import '../modals/create_assessment_modal.dart';
+import '../modals/create_folder_modal.dart';
 import '../providers/assessment_provider.dart';
 import '../providers/user_provider.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/loading.dart';
+
+// ═══════════════════════════════════════════════════════════════
+//  Main Screen
+// ═══════════════════════════════════════════════════════════════
 
 class AssessmentsScreen extends StatefulWidget {
   const AssessmentsScreen({super.key});
@@ -24,13 +30,20 @@ class AssessmentsScreen extends StatefulWidget {
 }
 
 class _AssessmentsScreenState extends State<AssessmentsScreen> {
+  /// Active filter tab: 'all', a type key like 'lab', or a folder id.
+  String _activeFilter = 'all';
+
   @override
   void initState() {
     super.initState();
-    Future.microtask(
-      () => context.read<AssessmentProvider>().loadAllAssessments(),
-    );
+    Future.microtask(() {
+      final p = context.read<AssessmentProvider>();
+      p.loadAllAssessments();
+      p.loadFolders();
+    });
   }
+
+  // ── Create Assessment ──
 
   Future<void> _openCreateModal() async {
     await showModalBottomSheet(
@@ -77,6 +90,8 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
       ),
     );
   }
+
+  // ── Delete Assessment ──
 
   Future<void> _deleteAssessment(
     String courseCode,
@@ -231,6 +246,123 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     return completer.future;
   }
 
+  Future<bool> _showDeleteFolderConfirmOverlay(String folderName) async {
+    final completer = Completer<bool>();
+    final overlay = Overlay.of(context);
+    late OverlayEntry entry;
+
+    entry = OverlayEntry(
+      builder: (context) => Material(
+        color: Colors.black.withOpacity(0.4),
+        child: Center(
+          child: Container(
+            margin: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.08),
+                  blurRadius: 16,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.delete_outline_rounded,
+                  color: Colors.red,
+                  size: 36,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Delete Folder',
+                  style: TextStyle(
+                    color: Color(0xFF1B3B22),
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Are you sure you want to delete the "$folderName" folder?\nAssessments inside will not be deleted.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: Color(0xFF607064),
+                    fontSize: 14,
+                    height: 1.4,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(false);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE5ECE7),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Cancel',
+                              style: TextStyle(
+                                color: Color(0xFF4F5F55),
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: GestureDetector(
+                        onTap: () {
+                          entry.remove();
+                          completer.complete(true);
+                        },
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.red,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              'Delete',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+
+    overlay.insert(entry);
+    return completer.future;
+  }
+
+  // ── View Details ──
+
   void _showAssessmentDetails(AssessmentModel assessment) {
     final user = context.read<UserProvider>().user;
     final role = user?.role ?? 'Unknown';
@@ -249,6 +381,79 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     );
   }
 
+  // ── Create Folder ──
+
+  Future<void> _openCreateFolderModal() async {
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => CreateFolderModal(
+        onSave: (name, colorHex) async {
+          await context.read<AssessmentProvider>().createFolder(name, colorHex);
+          await CenterToast.show(
+            context,
+            message: 'Folder "$name" created',
+            icon: Icons.create_new_folder_rounded,
+            color: AppColors.primary,
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _openEditFolderModal(String folderId) async {
+    final provider = context.read<AssessmentProvider>();
+    final folder = provider.folders.firstWhere((f) => f.id == folderId);
+
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => CreateFolderModal(
+        initialName: folder.name,
+        initialColorHex: folder.colorHex,
+        onSave: (name, colorHex) async {
+          await provider.updateFolder(folderId, name, colorHex);
+          await CenterToast.show(
+            context,
+            message: 'Folder "$name" updated',
+            icon: Icons.check_circle_rounded,
+            color: AppColors.primary,
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Filtering Logic ──
+
+  List<AssessmentModel> _filterAssessments(
+    List<AssessmentModel> all,
+    AssessmentProvider provider,
+  ) {
+    if (_activeFilter == 'all') return all;
+
+    // Check if it's a type filter (icon key)
+    final iconTypes = provider.assessmentIconTypes;
+    if (iconTypes.contains(_activeFilter)) {
+      return all.where((a) => a.icon == _activeFilter).toList();
+    }
+
+    // Otherwise it's a folder id
+    final folder = provider.folders.where((f) => f.id == _activeFilter);
+    if (folder.isEmpty) return all;
+
+    return all
+        .where(
+          (a) =>
+              folder.first.containsAssessment(a.courseCode, a.assessmentName),
+        )
+        .toList();
+  }
+
+  // ── Build ──
+
   @override
   Widget build(BuildContext context) {
     final assessmentProvider = context.watch<AssessmentProvider>();
@@ -256,6 +461,11 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     final assessments = assessmentProvider.allAssessments;
     final role = user?.role ?? 'Unknown';
     final canManage = role == 'Teacher' || role == 'Admin';
+
+    final filteredAssessments = _filterAssessments(
+      assessments,
+      assessmentProvider,
+    );
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -289,8 +499,46 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                       total: assessments.length,
                       role: role,
                       canManage: canManage,
+                      onManageTap: canManage
+                          ? () => context.push('/grading')
+                          : null,
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 12),
+
+                    // ── Folder Tab Bar ──
+                    _FolderTabBar(
+                      activeFilter: _activeFilter,
+                      iconTypes: assessmentProvider.assessmentIconTypes,
+                      folders: assessmentProvider.folders,
+                      canManage: canManage,
+                      onFilterChanged: (filter) {
+                        setState(() => _activeFilter = filter);
+                      },
+                      onCreateFolder: _openCreateFolderModal,
+                      onEditFolder: _openEditFolderModal,
+                      onDeleteFolder: (folderId) async {
+                        final folder = assessmentProvider.folders.firstWhere(
+                          (f) => f.id == folderId,
+                        );
+                        final confirmed = await _showDeleteFolderConfirmOverlay(
+                          folder.name,
+                        );
+                        if (!confirmed) return;
+
+                        await assessmentProvider.deleteFolder(folderId);
+                        if (_activeFilter == folderId) {
+                          setState(() => _activeFilter = 'all');
+                        }
+                        await CenterToast.show(
+                          context,
+                          message: 'Folder deleted',
+                          icon: Icons.check_circle,
+                          color: Colors.green,
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 14),
+
                     if (assessmentProvider.isLoading && assessments.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 36),
@@ -327,19 +575,32 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                                   .read<AssessmentProvider>()
                                   .loadAllAssessments(),
                       )
+                    else if (filteredAssessments.isEmpty)
+                      _StatusCard(
+                        icon: Icons.folder_open_rounded,
+                        title: 'No assessments here',
+                        message:
+                            'This folder is empty. Move assessments here from their details.',
+                        actionLabel: 'Show All',
+                        onActionTap: () {
+                          setState(() => _activeFilter = 'all');
+                        },
+                      )
                     else ...[
-                      const Padding(
-                        padding: EdgeInsets.only(bottom: 10),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
                         child: Text(
-                          'Assessments List',
-                          style: TextStyle(
+                          _activeFilter == 'all'
+                              ? 'All Assessments'
+                              : '${filteredAssessments.length} assessment${filteredAssessments.length == 1 ? '' : 's'}',
+                          style: const TextStyle(
                             fontSize: 20,
                             fontWeight: FontWeight.w800,
                             color: Color(0xFF1B3B22),
                           ),
                         ),
                       ),
-                      ...assessments.map(
+                      ...filteredAssessments.map(
                         (assessment) => Padding(
                           padding: const EdgeInsets.only(bottom: 10),
                           child: _AssessmentCard(
@@ -360,6 +621,232 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Folder Tab Bar
+// ═══════════════════════════════════════════════════════════════
+
+class _FolderTabBar extends StatelessWidget {
+  const _FolderTabBar({
+    required this.activeFilter,
+    required this.iconTypes,
+    required this.folders,
+    required this.canManage,
+    required this.onFilterChanged,
+    required this.onCreateFolder,
+    required this.onEditFolder,
+    required this.onDeleteFolder,
+  });
+
+  final String activeFilter;
+  final List<String> iconTypes;
+  final List<AssessmentFolderModel> folders;
+  final bool canManage;
+  final ValueChanged<String> onFilterChanged;
+  final VoidCallback onCreateFolder;
+  final ValueChanged<String> onEditFolder;
+  final ValueChanged<String> onDeleteFolder;
+
+  String _iconLabel(String key) {
+    switch (key) {
+      case 'lab':
+        return 'Lab';
+      case 'midterm':
+        return 'Midterm';
+      case 'quiz':
+        return 'Quiz';
+      case 'final':
+        return 'Final';
+      case 'assignment':
+        return 'Assignment';
+      case 'project':
+        return 'Project';
+      case 'presentation':
+        return 'Presentation';
+      default:
+        return key[0].toUpperCase() + key.substring(1);
+    }
+  }
+
+  IconData _iconDataFor(String key) {
+    return assessmentIconFromKey(key);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 40,
+      child: ListView(
+        scrollDirection: Axis.horizontal,
+        children: [
+          // ── "All" chip ──
+          _FilterChip(
+            label: 'All',
+            icon: Icons.dashboard_rounded,
+            isActive: activeFilter == 'all',
+            onTap: () => onFilterChanged('all'),
+          ),
+          const SizedBox(width: 8),
+
+          // ── Custom folder chips ──
+          ...folders.map(
+            (folder) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: _FilterChip(
+                label: folder.name,
+                colorDot: assessmentColorFromHex(folder.colorHex),
+                isActive: activeFilter == folder.id,
+                fillActiveBackground: false,
+                onTap: () => onFilterChanged(folder.id),
+                onEditTap: canManage && activeFilter == folder.id
+                    ? () => onEditFolder(folder.id)
+                    : null,
+                onDeleteTap: canManage && activeFilter == folder.id
+                    ? () => onDeleteFolder(folder.id)
+                    : null,
+              ),
+            ),
+          ),
+
+          // ── "+" add folder button ──
+          if (canManage)
+            GestureDetector(
+              onTap: onCreateFolder,
+              child: Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withOpacity(0.08),
+                  shape: BoxShape.circle,
+                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                ),
+                child: const Icon(
+                  Icons.add_rounded,
+                  color: AppColors.primary,
+                  size: 20,
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterChip extends StatelessWidget {
+  const _FilterChip({
+    required this.label,
+    this.icon,
+    this.colorDot,
+    required this.isActive,
+    this.fillActiveBackground = true,
+    required this.onTap,
+    this.onEditTap,
+    this.onDeleteTap,
+  });
+
+  final String label;
+  final IconData? icon;
+  final Color? colorDot;
+  final bool isActive;
+  final bool fillActiveBackground;
+  final VoidCallback onTap;
+  final VoidCallback? onEditTap;
+  final VoidCallback? onDeleteTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: isActive && fillActiveBackground
+              ? AppColors.secondary
+              : Colors.white,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: isActive ? AppColors.secondary : const Color(0xFFD5DDD8),
+            width: 1.2,
+          ),
+          boxShadow: isActive
+              ? [
+                  BoxShadow(
+                    color: AppColors.secondary.withOpacity(0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (colorDot != null) ...[
+              Container(
+                width: 10,
+                height: 10,
+                decoration: BoxDecoration(
+                  color: colorDot,
+                  shape: BoxShape.circle,
+                ),
+              ),
+              const SizedBox(width: 6),
+            ] else if (icon != null) ...[
+              Icon(
+                icon,
+                size: 16,
+                color: isActive && fillActiveBackground
+                    ? Colors.white
+                    : const Color(0xFF77887D),
+              ),
+              const SizedBox(width: 5),
+            ],
+            Text(
+              label,
+              style: TextStyle(
+                color: isActive && fillActiveBackground
+                    ? Colors.white
+                    : const Color(0xFF3A5240),
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            if (onEditTap != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onEditTap,
+                child: Icon(
+                  Icons.edit_rounded,
+                  size: 16,
+                  color: isActive && fillActiveBackground
+                      ? Colors.white70
+                      : AppColors.secondary,
+                ),
+              ),
+            ],
+            if (onDeleteTap != null) ...[
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: onDeleteTap,
+                child: const Icon(
+                  Icons.close_rounded,
+                  size: 16,
+                  color: Colors.red,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Header
+// ═══════════════════════════════════════════════════════════════
 
 class _AssessmentsHeader extends StatelessWidget {
   const _AssessmentsHeader({
@@ -422,6 +909,10 @@ class _AssessmentsHeader extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Helper
+// ═══════════════════════════════════════════════════════════════
+
 String _toReadableError(String rawError) {
   if (rawError.contains('SESSION_EXPIRED')) {
     return 'Your session has expired. Please log in again.';
@@ -435,16 +926,22 @@ String _toReadableError(String rawError) {
   return rawError.replaceFirst('Exception: ', '');
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Summary Card
+// ═══════════════════════════════════════════════════════════════
+
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.total,
     required this.role,
     required this.canManage,
+    this.onManageTap,
   });
 
   final int total;
   final String role;
   final bool canManage;
+  final VoidCallback? onManageTap;
 
   @override
   Widget build(BuildContext context) {
@@ -499,17 +996,34 @@ class _SummaryCard extends StatelessWidget {
             ),
           ),
           if (canManage)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Text(
-                'Manage',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
+            GestureDetector(
+              onTap: onManageTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.grading_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Manage',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -518,6 +1032,10 @@ class _SummaryCard extends StatelessWidget {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Status Card
+// ═══════════════════════════════════════════════════════════════
 
 class _StatusCard extends StatelessWidget {
   const _StatusCard({
@@ -590,10 +1108,12 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Details Header Helper
+// ═══════════════════════════════════════════════════════════════
+
 String getDetailsHeader(String? iconKey) {
   switch (iconKey?.toLowerCase()) {
-    case 'lecture':
-      return 'Lecture Notes';
     case 'lab':
       return 'Lab Instructions';
     case 'midterm':
@@ -612,6 +1132,10 @@ String getDetailsHeader(String? iconKey) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+//  Assessment Details Sheet (with Move to Folder)
+// ═══════════════════════════════════════════════════════════════
+
 class _AssessmentDetailsSheet extends StatelessWidget {
   const _AssessmentDetailsSheet({
     required this.assessment,
@@ -625,6 +1149,7 @@ class _AssessmentDetailsSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final provider = context.watch<AssessmentProvider>();
     final title = assessment.assessmentName.trim();
     final courseCode = assessment.courseCode.trim();
     final guide = assessment.guide?.trim();
@@ -637,6 +1162,11 @@ class _AssessmentDetailsSheet extends StatelessWidget {
     final iconData = assessmentIconFromKey(assessment.icon);
     final hasImage =
         assessment.imageBase64 != null && assessment.imageBase64!.isNotEmpty;
+
+    final currentFolder = provider.getFolderForAssessment(
+      assessment.courseCode,
+      assessment.assessmentName,
+    );
 
     return SafeArea(
       child: Container(
@@ -731,6 +1261,18 @@ class _AssessmentDetailsSheet extends StatelessWidget {
                 value: dateLabel,
                 accentColor: accentColor,
               ),
+
+              // ── Current folder badge ──
+              if (currentFolder != null) ...[
+                const SizedBox(height: 4),
+                _DetailRow(
+                  icon: Icons.folder_rounded,
+                  label: 'Folder',
+                  value: currentFolder.name,
+                  accentColor: assessmentColorFromHex(currentFolder.colorHex),
+                ),
+              ],
+
               const SizedBox(height: 18),
 
               // ── Dynamic Header based on Type ──
@@ -788,9 +1330,35 @@ class _AssessmentDetailsSheet extends StatelessWidget {
                   ),
                 ),
 
+              // ── Move to Folder button ──
+              if (canManage && provider.folders.isNotEmpty) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => _showFolderPicker(context, provider),
+                    icon: const Icon(Icons.drive_file_move_rounded),
+                    label: Text(
+                      currentFolder != null
+                          ? 'Move to Folder (${currentFolder.name})'
+                          : 'Move to Folder',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: AppColors.primary,
+                      side: const BorderSide(color: AppColors.primary),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+
               // ── Delete button ──
               if (canManage) ...[
-                const SizedBox(height: 32),
+                const SizedBox(height: 12),
                 SizedBox(
                   width: double.infinity,
                   child: OutlinedButton.icon(
@@ -821,7 +1389,204 @@ class _AssessmentDetailsSheet extends StatelessWidget {
       ),
     );
   }
+
+  void _showFolderPicker(BuildContext context, AssessmentProvider provider) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => _FolderPickerSheet(
+        folders: provider.folders,
+        currentFolderId: provider
+            .getFolderForAssessment(
+              assessment.courseCode,
+              assessment.assessmentName,
+            )
+            ?.id,
+        onSelect: (folderId) async {
+          if (folderId == null) {
+            await provider.removeFromFolder(
+              assessment.courseCode,
+              assessment.assessmentName,
+            );
+            await CenterToast.show(
+              context,
+              message: 'Removed from folder',
+              icon: Icons.folder_off_rounded,
+              color: Colors.orange,
+            );
+          } else {
+            await provider.addToFolder(
+              folderId,
+              assessment.courseCode,
+              assessment.assessmentName,
+            );
+            final folderName = provider.folders
+                .firstWhere((f) => f.id == folderId)
+                .name;
+            await CenterToast.show(
+              context,
+              message: 'Moved to "$folderName"',
+              icon: Icons.folder_rounded,
+              color: AppColors.primary,
+            );
+          }
+          Navigator.pop(ctx);
+        },
+      ),
+    );
+  }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Folder Picker Sheet
+// ═══════════════════════════════════════════════════════════════
+
+class _FolderPickerSheet extends StatelessWidget {
+  const _FolderPickerSheet({
+    required this.folders,
+    required this.currentFolderId,
+    required this.onSelect,
+  });
+
+  final List<AssessmentFolderModel> folders;
+  final String? currentFolderId;
+  final ValueChanged<String?> onSelect;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // ── Drag handle ──
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Move to Folder',
+              style: TextStyle(
+                color: Color(0xFF1B3B22),
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Select a folder or remove from current folder',
+              style: TextStyle(
+                color: Color(0xFF607064),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ── "Remove from folder" option ──
+            if (currentFolderId != null) ...[
+              _FolderOption(
+                name: 'Remove from folder',
+                color: Colors.red,
+                icon: Icons.folder_off_rounded,
+                isSelected: false,
+                onTap: () => onSelect(null),
+              ),
+              const SizedBox(height: 8),
+              Divider(color: const Color(0xFFE5ECE7), height: 1),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Folder options ──
+            ...folders.map(
+              (folder) => Padding(
+                padding: const EdgeInsets.only(bottom: 6),
+                child: _FolderOption(
+                  name: folder.name,
+                  color: assessmentColorFromHex(folder.colorHex),
+                  icon: Icons.folder_rounded,
+                  isSelected: folder.id == currentFolderId,
+                  onTap: () => onSelect(folder.id),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _FolderOption extends StatelessWidget {
+  const _FolderOption({
+    required this.name,
+    required this.color,
+    required this.icon,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String name;
+  final Color color;
+  final IconData icon;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.08) : const Color(0xFFF8FAF8),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: isSelected ? color : const Color(0xFFE5ECE7),
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 22),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                name,
+                style: TextStyle(
+                  color: color == Colors.red
+                      ? Colors.red
+                      : const Color(0xFF1B3B22),
+                  fontSize: 15,
+                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
+                ),
+              ),
+            ),
+            if (isSelected)
+              Icon(Icons.check_circle_rounded, color: color, size: 22),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  Detail Row
+// ═══════════════════════════════════════════════════════════════
 
 class _DetailRow extends StatelessWidget {
   const _DetailRow({
@@ -875,6 +1640,10 @@ class _DetailRow extends StatelessWidget {
     );
   }
 }
+
+// ═══════════════════════════════════════════════════════════════
+//  Assessment Card
+// ═══════════════════════════════════════════════════════════════
 
 class _AssessmentCard extends StatelessWidget {
   const _AssessmentCard({

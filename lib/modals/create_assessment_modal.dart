@@ -20,9 +20,7 @@ typedef CreateAssessmentCallback =
       String? imageBase64,
     });
 
-/// Preset icon choices for assessment types.
 const List<Map<String, dynamic>> kAssessmentIcons = [
-  {'key': 'lecture', 'icon': Icons.menu_book_outlined, 'label': 'Lecture'},
   {'key': 'lab', 'icon': Icons.science_outlined, 'label': 'Lab'},
   {'key': 'midterm', 'icon': Icons.edit_note_rounded, 'label': 'Midterm'},
   {'key': 'quiz', 'icon': Icons.quiz_outlined, 'label': 'Quiz'},
@@ -95,7 +93,7 @@ class _CreateAssessmentModalState extends State<CreateAssessmentModal> {
   final TextEditingController guideController = TextEditingController();
   bool isSubmitting = false;
 
-  String _selectedIcon = 'lecture';
+  String _selectedIcon = 'lab';
   Color _selectedColor = kAssessmentColors.first;
   String? _imageBase64;
 
@@ -200,7 +198,7 @@ class _CreateAssessmentModalState extends State<CreateAssessmentModal> {
               ),
               const SizedBox(height: 4),
               const Text(
-                'Add a new lecture, lab, quiz or exam.',
+                'Add a new lab, quiz or exam.',
                 style: TextStyle(
                   color: Color(0xFF607064),
                   fontSize: 13.5,
@@ -331,7 +329,7 @@ class _CreateAssessmentModalState extends State<CreateAssessmentModal> {
               TextField(
                 controller: nameController,
                 decoration: _inputDecoration(
-                  hint: 'e.g. Lecture, Lab, Midterm, Final',
+                  hint: 'e.g. Lab, Midterm, Final',
                   icon: Icons.label_outline_rounded,
                 ),
               ),

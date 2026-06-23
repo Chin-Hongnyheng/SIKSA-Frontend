@@ -9,6 +9,7 @@ import 'providers/assessment_provider.dart';
 import 'providers/schedule_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/attendance_provider.dart';
+import 'providers/grade_provider.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,13 +21,16 @@ Future<void> main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => CourseProvider()),
         ChangeNotifierProvider(
-          create: (_) => AssessmentProvider()..loadAllAssessments(),
+          create: (_) => AssessmentProvider()
+            ..loadAllAssessments()
+            ..loadFolders(),
         ),
         ChangeNotifierProvider(
           create: (_) => ScheduleProvider()..loadSchedules(),
         ),
         ChangeNotifierProvider(create: (_) => UserProvider()..loadUser()),
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
+        ChangeNotifierProvider(create: (_) => GradeProvider()),
       ],
       child: const MyApp(),
     ),

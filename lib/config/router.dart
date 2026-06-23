@@ -19,6 +19,7 @@ import '../screens/Attendance/create_attendance_session_page.dart';
 import '../screens/Attendance/view_attendance_sessions_page.dart';
 import '../screens/Attendance/studentAttendance_page.dart'
     as student_attendance;
+import '../screens/grading_screen.dart';
 
 Widget _dashboardForRole(BuildContext context) {
   final userProvider = context.watch<UserProvider>();
@@ -146,6 +147,10 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: '/student-dashboard',
       builder: (context, state) => const StudentDashBoardScreen(),
+    ),
+    GoRoute(
+      path: '/grading',
+      builder: (context, state) => const GradingScreen(),
     ),
   ],
 );

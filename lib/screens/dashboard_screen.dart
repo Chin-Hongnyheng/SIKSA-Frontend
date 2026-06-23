@@ -340,7 +340,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                             size: 36,
                           ),
                           title: 'Grade',
-                          onTap: () {},
+                          onTap: () => context.push('/grading'),
                         ),
                       ),
                       const SizedBox(width: 12),

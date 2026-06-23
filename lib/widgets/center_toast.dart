@@ -19,7 +19,7 @@ class CenterToast {
             constraints: const BoxConstraints(maxWidth: 280),
             padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 18),
             decoration: BoxDecoration(
-              color: Colors.black87,
+              color: Colors.white,
               borderRadius: BorderRadius.circular(16),
               boxShadow: const [
                 BoxShadow(
@@ -40,7 +40,7 @@ class CenterToast {
                     softWrap: true,
                     maxLines: null,
                     style: const TextStyle(
-                      color: Colors.white,
+                      color: Colors.black87,
                       fontSize: 15,
                       fontWeight: FontWeight.w500,
                     ),
