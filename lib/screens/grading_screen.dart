@@ -6,6 +6,9 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/grade_model.dart';
+import '../models/assessment_model.dart';
+import '../modals/assessment_details_modal.dart';
+import '../modals/create_assessment_modal.dart';
 import '../providers/assessment_provider.dart';
 import '../providers/course_provider.dart';
 import '../providers/grade_provider.dart';
@@ -23,6 +26,7 @@ class _GradingScreenState extends State<GradingScreen>
     with SingleTickerProviderStateMixin {
   String? _selectedCourseCode;
   bool _isInitialLoading = true;
+  bool _sortStudentAscending = true;
 
   // ── Editable score map: "studentId|assessmentName" → score string ──
   final Map<String, String> _editedScores = {};
@@ -193,7 +197,15 @@ class _GradingScreenState extends State<GradingScreen>
     final courses = courseProvider.courses;
     final assessments = assessmentProvider.assessments;
     final subscribers =
-        courseProvider.courseSubscribers[_selectedCourseCode] ?? [];
+        List.from(courseProvider.courseSubscribers[_selectedCourseCode] ?? []);
+    
+    subscribers.sort((a, b) {
+      final aName = a.userName.toLowerCase();
+      final bName = b.userName.toLowerCase();
+      return _sortStudentAscending
+          ? aName.compareTo(bName)
+          : bName.compareTo(aName);
+    });
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -202,7 +214,12 @@ class _GradingScreenState extends State<GradingScreen>
         child: Column(
           children: [
             // ── Header ──
-            _GradingHeader(onBackTap: () => context.pop()),
+            _GradingHeader(
+              onBackTap: () => context.pop(),
+              onManageTap: assessments.isNotEmpty
+                  ? () => _openManageColumnsSheet(context)
+                  : null,
+            ),
 
             // ── Course Selector ──
             if (_isInitialLoading)
@@ -243,10 +260,14 @@ class _GradingScreenState extends State<GradingScreen>
                             'No students have subscribed to this course yet.',
                       )
                     : _GradingTable(
-                        assessmentNames: assessments
-                            .map((a) => a.assessmentName)
-                            .toList(),
+                        assessments: assessments,
                         students: subscribers,
+                        sortAscending: _sortStudentAscending,
+                        onSortToggle: () {
+                          setState(() {
+                            _sortStudentAscending = !_sortStudentAscending;
+                          });
+                        },
                         editedScores: _editedScores,
                         originalScores: _originalScores,
                         onScoreChanged: (key, value) {
@@ -278,6 +299,127 @@ class _GradingScreenState extends State<GradingScreen>
           : null,
     );
   }
+
+  void _openManageColumnsSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => const _ManageColumnsSheet(),
+    );
+  }
+}
+
+class _ManageColumnsSheet extends StatelessWidget {
+  const _ManageColumnsSheet();
+
+  @override
+  Widget build(BuildContext context) {
+    final provider = context.watch<AssessmentProvider>();
+    final assessments = provider.assessments;
+    
+    return SafeArea(
+      child: Container(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(context).size.height * 0.6,
+        ),
+        padding: const EdgeInsets.all(16),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+        ),
+        child: Column(
+          children: [
+            // Drag handle
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(8),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            const Text(
+              'Manage Columns',
+              style: TextStyle(
+                color: Color(0xFF1B3B22),
+                fontSize: 20,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            const Text(
+              'Drag to reorder assessment columns',
+              style: TextStyle(
+                color: Color(0xFF607064),
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Expanded(
+              child: ReorderableListView(
+                buildDefaultDragHandles: false,
+                proxyDecorator: (Widget child, int index, Animation<double> animation) {
+                  return Material(
+                    color: Colors.transparent,
+                    elevation: 0,
+                    child: child,
+                  );
+                },
+                onReorder: (oldIndex, newIndex) {
+                  provider.reorderAssessments(
+                    oldIndex,
+                    newIndex,
+                    assessments,
+                  );
+                },
+                children: [
+                  for (int i = 0; i < assessments.length; i++)
+                    ReorderableDelayedDragStartListener(
+                      key: ValueKey('${assessments[i].courseCode}|${assessments[i].assessmentName}'),
+                      index: i,
+                      child: Container(
+                        margin: const EdgeInsets.only(bottom: 8),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAF8),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: const Color(0xFFE5ECE7)),
+                        ),
+                        child: ListTile(
+                          leading: Container(
+                            width: 32,
+                            height: 32,
+                            decoration: BoxDecoration(
+                              color: assessmentColorFromHex(assessments[i].color).withOpacity(0.12),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Icon(
+                              assessmentIconFromKey(assessments[i].icon),
+                              color: assessmentColorFromHex(assessments[i].color),
+                              size: 16,
+                            ),
+                          ),
+                          title: Text(
+                            assessments[i].assessmentName,
+                            style: const TextStyle(
+                              color: Color(0xFF1B3B22),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -285,9 +427,10 @@ class _GradingScreenState extends State<GradingScreen>
 // ═══════════════════════════════════════════════════════════════
 
 class _GradingHeader extends StatelessWidget {
-  const _GradingHeader({required this.onBackTap});
+  const _GradingHeader({required this.onBackTap, this.onManageTap});
 
   final VoidCallback onBackTap;
+  final VoidCallback? onManageTap;
 
   @override
   Widget build(BuildContext context) {
@@ -331,7 +474,34 @@ class _GradingHeader extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 48),
+          if (onManageTap != null)
+            GestureDetector(
+              onTap: onManageTap,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.view_column_rounded, color: Colors.white, size: 16),
+                    SizedBox(width: 4),
+                    Text(
+                      'Columns',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            const SizedBox(width: 48),
         ],
       ),
     );
@@ -498,7 +668,7 @@ class _EmptyState extends StatelessWidget {
 
 class _GradingTable extends StatelessWidget {
   const _GradingTable({
-    required this.assessmentNames,
+    required this.assessments,
     required this.students,
     required this.editedScores,
     required this.originalScores,
@@ -506,10 +676,14 @@ class _GradingTable extends StatelessWidget {
     required this.headerHorizontalCtrl,
     required this.bodyHorizontalCtrl,
     required this.bodyVerticalCtrl,
+    required this.sortAscending,
+    required this.onSortToggle,
   });
 
-  final List<String> assessmentNames;
+  final List<AssessmentModel> assessments;
   final List students;
+  final bool sortAscending;
+  final VoidCallback onSortToggle;
   final Map<String, String> editedScores;
   final Map<String, String> originalScores;
   final void Function(String key, String value) onScoreChanged;
@@ -559,6 +733,10 @@ class _GradingTable extends StatelessWidget {
                   text: 'Student',
                   width: _nameColWidth,
                   isFirst: false,
+                  sortIcon: sortAscending
+                      ? Icons.arrow_downward_rounded
+                      : Icons.arrow_upward_rounded,
+                  onTap: onSortToggle,
                 ),
                 // Divider
                 Container(width: 1, color: const Color(0xFFD5DDD8)),
@@ -568,10 +746,23 @@ class _GradingTable extends StatelessWidget {
                     controller: headerHorizontalCtrl,
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: assessmentNames
+                      children: assessments
                           .map(
-                            (name) =>
-                                _HeaderCell(text: name, width: _cellWidth),
+                            (assessment) => _HeaderCell(
+                              text: assessment.assessmentName,
+                              width: _cellWidth,
+                              onTap: () {
+                                showModalBottomSheet(
+                                  context: context,
+                                  isScrollControlled: true,
+                                  backgroundColor: Colors.transparent,
+                                  builder: (ctx) => AssessmentDetailsModal(
+                                    assessment: assessment,
+                                    canManage: false, // Don't allow delete/move from grading screen
+                                  ),
+                                );
+                              },
+                            ),
                           )
                           .toList(),
                     ),
@@ -634,7 +825,8 @@ class _GradingTable extends StatelessWidget {
                         children: List.generate(students.length, (rowIndex) {
                           final student = students[rowIndex];
                           return Row(
-                            children: assessmentNames.map((aName) {
+                            children: assessments.map((assessment) {
+                              final aName = assessment.assessmentName;
                               final key = '${student.id}|$aName';
                               final currentVal = editedScores[key] ?? '';
                               final originalVal = originalScores[key] ?? '';
@@ -695,7 +887,7 @@ class _GradingTable extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 Text(
-                  '${assessmentNames.length} assessments',
+                  '${assessments.length} assessments',
                   style: TextStyle(
                     color: AppColors.primary.withOpacity(0.8),
                     fontSize: 13,
@@ -721,16 +913,22 @@ class _HeaderCell extends StatelessWidget {
     required this.width,
     this.isFirst = false,
     this.isNumberCol = false,
+    this.sortIcon,
+    this.onTap,
   });
 
   final String text;
   final double width;
   final bool isFirst;
   final bool isNumberCol;
+  final IconData? sortIcon;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
       width: width,
       height: double.infinity,
       padding: EdgeInsets.symmetric(
@@ -751,18 +949,30 @@ class _HeaderCell extends StatelessWidget {
         ),
       ),
       child: Center(
-        child: Text(
-          text,
-          textAlign: TextAlign.center,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          style: TextStyle(
-            color: const Color(0xFF1B3B22),
-            fontSize: isNumberCol ? 12 : 13,
-            fontWeight: FontWeight.w800,
-            height: 1.2,
-          ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Flexible(
+              child: Text(
+                text,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: const Color(0xFF1B3B22),
+                  fontSize: isNumberCol ? 12 : 13,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
+            ),
+            if (sortIcon != null) ...[
+              const SizedBox(width: 4),
+              Icon(sortIcon, size: 14, color: const Color(0xFF1B3B22)),
+            ],
+          ],
         ),
+      ),
       ),
     );
   }

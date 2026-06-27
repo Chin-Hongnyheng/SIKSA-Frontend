@@ -174,4 +174,145 @@ class AssessmentService {
 
     return result.data!['deleteAssessment']['message'];
   }
+
+  // ═══════════════════════════════════════════════════════════════
+  //  Assessment Folders
+  // ═══════════════════════════════════════════════════════════════
+
+  static const String _folderFields = '''
+    id
+    name
+    colorHex
+    assessmentKeys
+    order
+  ''';
+
+  Future<List<dynamic>> getMyAssessmentFolders() async {
+    final authClient = _authClient();
+
+    const String query = """
+      query {
+        getMyAssessmentFolders {
+          $_folderFields
+        }
+      }
+    """;
+
+    final result = await authClient.query(QueryOptions(document: gql(query)));
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+
+    return result.data!['getMyAssessmentFolders'];
+  }
+
+  Future<dynamic> createAssessmentFolder({
+    required String name,
+    required String colorHex,
+    List<String>? assessmentKeys,
+  }) async {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation CreateAssessmentFolder(\$input: CreateAssessmentFolderInput!) {
+        createAssessmentFolder(input: \$input) {
+          $_folderFields
+        }
+      }
+    """;
+
+    final Map<String, dynamic> input = {
+      "name": name,
+      "colorHex": colorHex,
+      if (assessmentKeys != null) "assessmentKeys": assessmentKeys,
+    };
+
+    final result = await authClient.mutate(
+      MutationOptions(document: gql(mutation), variables: {"input": input}),
+    );
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+
+    return result.data!['createAssessmentFolder'];
+  }
+
+  Future<dynamic> updateAssessmentFolder({
+    required String id,
+    String? name,
+    String? colorHex,
+    List<String>? assessmentKeys,
+  }) async {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation UpdateAssessmentFolder(\$input: UpdateAssessmentFolderInput!) {
+        updateAssessmentFolder(input: \$input) {
+          $_folderFields
+        }
+      }
+    """;
+
+    final Map<String, dynamic> input = {
+      "id": id,
+      if (name != null) "name": name,
+      if (colorHex != null) "colorHex": colorHex,
+      if (assessmentKeys != null) "assessmentKeys": assessmentKeys,
+    };
+
+    final result = await authClient.mutate(
+      MutationOptions(document: gql(mutation), variables: {"input": input}),
+    );
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+
+    return result.data!['updateAssessmentFolder'];
+  }
+
+  Future<void> deleteAssessmentFolder(String id) async {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation DeleteAssessmentFolder(\$id: String!) {
+        deleteAssessmentFolder(id: \$id) {
+          success
+        }
+      }
+    """;
+
+    final result = await authClient.mutate(
+      MutationOptions(document: gql(mutation), variables: {"id": id}),
+    );
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+  }
+
+  Future<void> reorderAssessmentFolders(List<String> folderIds) async {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation ReorderAssessmentFolders(\$folderIds: [String!]!) {
+        reorderAssessmentFolders(folderIds: \$folderIds) {
+          success
+        }
+      }
+    """;
+
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {"folderIds": folderIds},
+      ),
+    );
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+  }
 }

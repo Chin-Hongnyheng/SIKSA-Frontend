@@ -11,6 +11,7 @@ import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
 import '../models/assessment_model.dart';
 import '../models/assessment_folder_model.dart';
+import '../modals/assessment_details_modal.dart';
 import '../modals/create_assessment_modal.dart';
 import '../modals/create_folder_modal.dart';
 import '../providers/assessment_provider.dart';
@@ -32,6 +33,9 @@ class AssessmentsScreen extends StatefulWidget {
 class _AssessmentsScreenState extends State<AssessmentsScreen> {
   /// Active filter tab: 'all', a type key like 'lab', or a folder id.
   String _activeFilter = 'all';
+
+  bool _isCustomizingAssessments = false;
+  List<AssessmentFolderModel> _editableFolders = [];
 
   @override
   void initState() {
@@ -372,7 +376,7 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (ctx) => _AssessmentDetailsSheet(
+      builder: (ctx) => AssessmentDetailsModal(
         assessment: assessment,
         canManage: canManage,
         onDelete: () =>
@@ -390,7 +394,15 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
       backgroundColor: Colors.transparent,
       builder: (ctx) => CreateFolderModal(
         onSave: (name, colorHex) async {
-          await context.read<AssessmentProvider>().createFolder(name, colorHex);
+          final newFolder = await context
+              .read<AssessmentProvider>()
+              .createFolder(name, colorHex);
+          setState(() {
+            if (_isCustomizingAssessments) {
+              _editableFolders.add(newFolder);
+            }
+            _activeFilter = newFolder.id;
+          });
           await CenterToast.show(
             context,
             message: 'Folder "$name" created',
@@ -415,6 +427,17 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
         initialColorHex: folder.colorHex,
         onSave: (name, colorHex) async {
           await provider.updateFolder(folderId, name, colorHex);
+          setState(() {
+            if (_isCustomizingAssessments) {
+              final idx = _editableFolders.indexWhere((f) => f.id == folderId);
+              if (idx != -1) {
+                _editableFolders[idx] = _editableFolders[idx].copyWith(
+                  name: name,
+                  colorHex: colorHex,
+                );
+              }
+            }
+          });
           await CenterToast.show(
             context,
             message: 'Folder "$name" updated',
@@ -497,10 +520,27 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                   children: [
                     _SummaryCard(
                       total: assessments.length,
-                      role: role,
                       canManage: canManage,
+                      isCustomizing: _isCustomizingAssessments,
                       onManageTap: canManage
                           ? () => context.push('/grading')
+                          : null,
+                      onCustomizingToggle: canManage
+                          ? () {
+                              final provider = context
+                                  .read<AssessmentProvider>();
+                              setState(() {
+                                if (_isCustomizingAssessments) {
+                                  _isCustomizingAssessments = false;
+                                  provider.reorderFolders(_editableFolders);
+                                } else {
+                                  _isCustomizingAssessments = true;
+                                  _editableFolders = List.from(
+                                    provider.folders,
+                                  );
+                                }
+                              });
+                            }
                           : null,
                     ),
                     const SizedBox(height: 12),
@@ -509,8 +549,11 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                     _FolderTabBar(
                       activeFilter: _activeFilter,
                       iconTypes: assessmentProvider.assessmentIconTypes,
-                      folders: assessmentProvider.folders,
+                      folders: _isCustomizingAssessments
+                          ? _editableFolders
+                          : assessmentProvider.folders,
                       canManage: canManage,
+                      isEditing: _isCustomizingAssessments,
                       onFilterChanged: (filter) {
                         setState(() => _activeFilter = filter);
                       },
@@ -526,15 +569,26 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                         if (!confirmed) return;
 
                         await assessmentProvider.deleteFolder(folderId);
-                        if (_activeFilter == folderId) {
-                          setState(() => _activeFilter = 'all');
-                        }
+                        setState(() {
+                          if (_isCustomizingAssessments) {
+                            _editableFolders.removeWhere((f) => f.id == folderId);
+                          }
+                          if (_activeFilter == folderId) {
+                            _activeFilter = 'all';
+                          }
+                        });
                         await CenterToast.show(
                           context,
                           message: 'Folder deleted',
                           icon: Icons.check_circle,
                           color: Colors.green,
                         );
+                      },
+                      onReorderFolders: (oldIndex, newIndex) {
+                        setState(() {
+                          final item = _editableFolders.removeAt(oldIndex);
+                          _editableFolders.insert(newIndex, item);
+                        });
                       },
                     ),
                     const SizedBox(height: 14),
@@ -589,15 +643,43 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                     else ...[
                       Padding(
                         padding: const EdgeInsets.only(bottom: 10),
-                        child: Text(
-                          _activeFilter == 'all'
-                              ? 'All Assessments'
-                              : '${filteredAssessments.length} assessment${filteredAssessments.length == 1 ? '' : 's'}',
-                          style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                            color: Color(0xFF1B3B22),
-                          ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              _activeFilter == 'all'
+                                  ? 'All Assessments'
+                                  : '${filteredAssessments.length} assessment${filteredAssessments.length == 1 ? '' : 's'}',
+                              style: const TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF1B3B22),
+                              ),
+                            ),
+                            if (_isCustomizingAssessments)
+                              GestureDetector(
+                                onTap: () => assessmentProvider
+                                    .sortAssessmentsAlphabetically(),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  child: const Text(
+                                    'Sort (A-Z)',
+                                    style: TextStyle(
+                                      color: AppColors.primary,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 13,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                          ],
                         ),
                       ),
                       ...filteredAssessments.map(
@@ -632,101 +714,231 @@ class _FolderTabBar extends StatelessWidget {
     required this.iconTypes,
     required this.folders,
     required this.canManage,
+    required this.isEditing,
     required this.onFilterChanged,
     required this.onCreateFolder,
     required this.onEditFolder,
     required this.onDeleteFolder,
+    required this.onReorderFolders,
   });
 
   final String activeFilter;
   final List<String> iconTypes;
   final List<AssessmentFolderModel> folders;
   final bool canManage;
+  final bool isEditing;
   final ValueChanged<String> onFilterChanged;
   final VoidCallback onCreateFolder;
   final ValueChanged<String> onEditFolder;
   final ValueChanged<String> onDeleteFolder;
-
-  String _iconLabel(String key) {
-    switch (key) {
-      case 'lab':
-        return 'Lab';
-      case 'midterm':
-        return 'Midterm';
-      case 'quiz':
-        return 'Quiz';
-      case 'final':
-        return 'Final';
-      case 'assignment':
-        return 'Assignment';
-      case 'project':
-        return 'Project';
-      case 'presentation':
-        return 'Presentation';
-      default:
-        return key[0].toUpperCase() + key.substring(1);
-    }
-  }
-
-  IconData _iconDataFor(String key) {
-    return assessmentIconFromKey(key);
-  }
+  final void Function(int, int)? onReorderFolders;
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
+    if (isEditing) {
+      return SizedBox(
+        height: 44,
+        child: ReorderableListView(
+          scrollDirection: Axis.horizontal,
+          buildDefaultDragHandles: false,
+          proxyDecorator:
+              (Widget child, int index, Animation<double> animation) {
+                return Material(
+                  color: Colors.transparent,
+                  elevation: 0,
+                  child: child,
+                );
+              },
+          onReorder: (oldIndex, newIndex) {
+            if (oldIndex == 0 || oldIndex == folders.length + 1) return;
+            if (newIndex <= 1) newIndex = 1;
+            if (newIndex > folders.length + 1) newIndex = folders.length + 1;
+            if (oldIndex < newIndex) {
+              newIndex -= 1;
+            }
+            onReorderFolders?.call(oldIndex - 1, newIndex - 1);
+          },
+          children: [
+            Padding(
+              key: const ValueKey('filter_all'),
+              padding: const EdgeInsets.only(right: 8),
+              child: _FilterChip(
+                label: 'All',
+                icon: Icons.dashboard_rounded,
+                isActive: activeFilter == 'all' && !isEditing,
+                onTap: () => onFilterChanged('all'),
+              ),
+            ),
+            for (int i = 0; i < folders.length; i++)
+              ReorderableDelayedDragStartListener(
+                key: ValueKey('folder_${folders[i].id}'),
+                index: i + 1,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: _EditableFolderChip(
+                    folder: folders[i],
+                    onDelete: () => onDeleteFolder(folders[i].id),
+                    onRename: () => onEditFolder(folders[i].id),
+                  ),
+                ),
+              ),
+            if (canManage)
+              Padding(
+                key: const ValueKey('new_folder_btn'),
+                padding: const EdgeInsets.only(right: 8),
+                child: GestureDetector(
+                  onTap: onCreateFolder,
+                  child: Container(
+                    height: 40,
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.primary.withOpacity(0.25),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: const [
+                        Icon(
+                          Icons.add_rounded,
+                          color: AppColors.primary,
+                          size: 18,
+                        ),
+                        SizedBox(width: 4),
+                        Text(
+                          'New Folder',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      );
+    } else {
+      return SizedBox(
+        height: 40,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            // ── "All" chip ──
+            _FilterChip(
+              label: 'All',
+              icon: Icons.dashboard_rounded,
+              isActive: activeFilter == 'all',
+              onTap: () => onFilterChanged('all'),
+            ),
+            const SizedBox(width: 8),
+
+            // ── Custom folder chips ──
+            ...folders.map(
+              (folder) => Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: _FilterChip(
+                  label: folder.name,
+                  colorDot: assessmentColorFromHex(folder.colorHex),
+                  isActive: activeFilter == folder.id,
+                  fillActiveBackground: false,
+                  onTap: () => onFilterChanged(folder.id),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+  }
+}
+
+class _EditableFolderChip extends StatelessWidget {
+  const _EditableFolderChip({
+    required this.folder,
+    required this.onDelete,
+    required this.onRename,
+  });
+
+  final AssessmentFolderModel folder;
+  final VoidCallback onDelete;
+  final VoidCallback onRename;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = assessmentColorFromHex(folder.colorHex);
+    return Container(
       height: 40,
-      child: ListView(
-        scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.only(left: 12, right: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: const Color(0xFFD5DDD8), width: 1.2),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          // ── "All" chip ──
-          _FilterChip(
-            label: 'All',
-            icon: Icons.dashboard_rounded,
-            isActive: activeFilter == 'all',
-            onTap: () => onFilterChanged('all'),
+          // ── Color dot ──
+          Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: 6),
+
+          // ── Label ──
+          Text(
+            folder.name,
+            style: const TextStyle(
+              color: Color(0xFF3A5240),
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+            ),
           ),
           const SizedBox(width: 8),
 
-          // ── Custom folder chips ──
-          ...folders.map(
-            (folder) => Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: _FilterChip(
-                label: folder.name,
-                colorDot: assessmentColorFromHex(folder.colorHex),
-                isActive: activeFilter == folder.id,
-                fillActiveBackground: false,
-                onTap: () => onFilterChanged(folder.id),
-                onEditTap: canManage && activeFilter == folder.id
-                    ? () => onEditFolder(folder.id)
-                    : null,
-                onDeleteTap: canManage && activeFilter == folder.id
-                    ? () => onDeleteFolder(folder.id)
-                    : null,
+          // ── Edit (pencil) icon ──
+          GestureDetector(
+            onTap: onRename,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: BoxDecoration(
+                color: AppColors.secondary.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.edit_rounded,
+                color: AppColors.secondary,
+                size: 16,
               ),
             ),
           ),
+          const SizedBox(width: 6),
 
-          // ── "+" add folder button ──
-          if (canManage)
-            GestureDetector(
-              onTap: onCreateFolder,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.08),
-                  shape: BoxShape.circle,
-                  border: Border.all(color: AppColors.primary.withOpacity(0.2)),
-                ),
-                child: const Icon(
-                  Icons.add_rounded,
-                  color: AppColors.primary,
-                  size: 20,
-                ),
+          // ── Delete icon ──
+          GestureDetector(
+            onTap: onDelete,
+            child: Container(
+              width: 28,
+              height: 28,
+              decoration: const BoxDecoration(
+                color: Color(0xFFE25B4C),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.close_rounded,
+                color: Colors.white,
+                size: 16,
               ),
             ),
+          ),
         ],
       ),
     );
@@ -933,15 +1145,17 @@ String _toReadableError(String rawError) {
 class _SummaryCard extends StatelessWidget {
   const _SummaryCard({
     required this.total,
-    required this.role,
     required this.canManage,
+    required this.isCustomizing,
     this.onManageTap,
+    this.onCustomizingToggle,
   });
 
   final int total;
-  final String role;
   final bool canManage;
+  final bool isCustomizing;
   final VoidCallback? onManageTap;
+  final VoidCallback? onCustomizingToggle;
 
   @override
   Widget build(BuildContext context) {
@@ -976,7 +1190,7 @@ class _SummaryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 const Text(
-                  'Assessment Overview',
+                  'Overview',
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w800,
@@ -985,7 +1199,7 @@ class _SummaryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '$total items - Role: $role',
+                  '$total items',
                   style: const TextStyle(
                     color: Color(0xFFE5F3E7),
                     fontWeight: FontWeight.w600,
@@ -1024,6 +1238,33 @@ class _SummaryCard extends StatelessWidget {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+          if (canManage) const SizedBox(width: 8),
+          if (canManage)
+            GestureDetector(
+              onTap: onCustomizingToggle,
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 200),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 6,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: Colors.white.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                child: Text(
+                  isCustomizing ? 'Done' : 'Custom',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             ),
@@ -1100,539 +1341,6 @@ class _StatusCard extends StatelessWidget {
                 ),
                 elevation: 0,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Details Header Helper
-// ═══════════════════════════════════════════════════════════════
-
-String getDetailsHeader(String? iconKey) {
-  switch (iconKey?.toLowerCase()) {
-    case 'lab':
-      return 'Lab Instructions';
-    case 'midterm':
-    case 'final':
-      return 'Exam Details';
-    case 'quiz':
-      return 'Quiz Instructions';
-    case 'assignment':
-      return 'Assignment Guidelines';
-    case 'project':
-      return 'Project Guidelines';
-    case 'presentation':
-      return 'Presentation Guidelines';
-    default:
-      return 'Instructions & Details';
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Assessment Details Sheet (with Move to Folder)
-// ═══════════════════════════════════════════════════════════════
-
-class _AssessmentDetailsSheet extends StatelessWidget {
-  const _AssessmentDetailsSheet({
-    required this.assessment,
-    required this.canManage,
-    this.onDelete,
-  });
-
-  final AssessmentModel assessment;
-  final bool canManage;
-  final VoidCallback? onDelete;
-
-  @override
-  Widget build(BuildContext context) {
-    final provider = context.watch<AssessmentProvider>();
-    final title = assessment.assessmentName.trim();
-    final courseCode = assessment.courseCode.trim();
-    final guide = assessment.guide?.trim();
-    final createdAt = DateTime.tryParse(assessment.createdAt ?? '');
-    final dateLabel = createdAt == null
-        ? '--'
-        : DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
-
-    final accentColor = assessmentColorFromHex(assessment.color);
-    final iconData = assessmentIconFromKey(assessment.icon);
-    final hasImage =
-        assessment.imageBase64 != null && assessment.imageBase64!.isNotEmpty;
-
-    final currentFolder = provider.getFolderForAssessment(
-      assessment.courseCode,
-      assessment.assessmentName,
-    );
-
-    return SafeArea(
-      child: Container(
-        constraints: BoxConstraints(
-          maxHeight: MediaQuery.of(context).size.height * 0.88,
-        ),
-        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // ── Drag handle ──
-              Center(
-                child: Container(
-                  width: 44,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 18),
-
-              // ── Header: Icon + Title ──
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 50,
-                    height: 50,
-                    decoration: BoxDecoration(
-                      color: accentColor.withOpacity(0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(iconData, color: accentColor, size: 26),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title.isNotEmpty ? title : 'Untitled assessment',
-                          style: const TextStyle(
-                            color: Color(0xFF1F2D22),
-                            fontSize: 22,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          courseCode.isNotEmpty
-                              ? 'Course: $courseCode'
-                              : 'Course not set',
-                          style: const TextStyle(
-                            color: Color(0xFF607064),
-                            fontWeight: FontWeight.w700,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-
-              // ── Image ──
-              if (hasImage) ...[
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.memory(
-                    base64Decode(assessment.imageBase64!),
-                    width: double.infinity,
-                    height: 180,
-                    fit: BoxFit.cover,
-                  ),
-                ),
-                const SizedBox(height: 18),
-              ],
-
-              // ── Created date ──
-              _DetailRow(
-                icon: Icons.event_outlined,
-                label: 'Created',
-                value: dateLabel,
-                accentColor: accentColor,
-              ),
-
-              // ── Current folder badge ──
-              if (currentFolder != null) ...[
-                const SizedBox(height: 4),
-                _DetailRow(
-                  icon: Icons.folder_rounded,
-                  label: 'Folder',
-                  value: currentFolder.name,
-                  accentColor: assessmentColorFromHex(currentFolder.colorHex),
-                ),
-              ],
-
-              const SizedBox(height: 18),
-
-              // ── Dynamic Header based on Type ──
-              Text(
-                getDetailsHeader(assessment.icon),
-                style: const TextStyle(
-                  color: Color(0xFF1B3B22),
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 8),
-              if (guide != null && guide.isNotEmpty)
-                MarkdownBody(
-                  data: guide,
-                  styleSheet: MarkdownStyleSheet(
-                    p: const TextStyle(
-                      color: Color(0xFF4F5F55),
-                      fontSize: 15,
-                      height: 1.45,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    h1: TextStyle(
-                      color: accentColor,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                    h2: TextStyle(
-                      color: accentColor,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w700,
-                    ),
-                    strong: const TextStyle(
-                      color: Color(0xFF1B3B22),
-                      fontWeight: FontWeight.w800,
-                    ),
-                    em: const TextStyle(
-                      color: Color(0xFF607064),
-                      fontStyle: FontStyle.italic,
-                    ),
-                    listBullet: TextStyle(
-                      color: accentColor,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                )
-              else
-                const Text(
-                  'No information has been added for this assessment yet.',
-                  style: TextStyle(
-                    color: Color(0xFF4F5F55),
-                    fontSize: 15,
-                    height: 1.45,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-              // ── Move to Folder button ──
-              if (canManage && provider.folders.isNotEmpty) ...[
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => _showFolderPicker(context, provider),
-                    icon: const Icon(Icons.drive_file_move_rounded),
-                    label: Text(
-                      currentFolder != null
-                          ? 'Move to Folder (${currentFolder.name})'
-                          : 'Move to Folder',
-                      style: const TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.primary,
-                      side: const BorderSide(color: AppColors.primary),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-
-              // ── Delete button ──
-              if (canManage) ...[
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      onDelete?.call();
-                    },
-                    icon: const Icon(Icons.delete_outline_rounded),
-                    label: const Text(
-                      'Delete Assessment',
-                      style: TextStyle(fontWeight: FontWeight.w700),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      overlayColor: Colors.red.withOpacity(0.08),
-                      side: const BorderSide(color: Colors.red),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _showFolderPicker(BuildContext context, AssessmentProvider provider) {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => _FolderPickerSheet(
-        folders: provider.folders,
-        currentFolderId: provider
-            .getFolderForAssessment(
-              assessment.courseCode,
-              assessment.assessmentName,
-            )
-            ?.id,
-        onSelect: (folderId) async {
-          if (folderId == null) {
-            await provider.removeFromFolder(
-              assessment.courseCode,
-              assessment.assessmentName,
-            );
-            await CenterToast.show(
-              context,
-              message: 'Removed from folder',
-              icon: Icons.folder_off_rounded,
-              color: Colors.orange,
-            );
-          } else {
-            await provider.addToFolder(
-              folderId,
-              assessment.courseCode,
-              assessment.assessmentName,
-            );
-            final folderName = provider.folders
-                .firstWhere((f) => f.id == folderId)
-                .name;
-            await CenterToast.show(
-              context,
-              message: 'Moved to "$folderName"',
-              icon: Icons.folder_rounded,
-              color: AppColors.primary,
-            );
-          }
-          Navigator.pop(ctx);
-        },
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Folder Picker Sheet
-// ═══════════════════════════════════════════════════════════════
-
-class _FolderPickerSheet extends StatelessWidget {
-  const _FolderPickerSheet({
-    required this.folders,
-    required this.currentFolderId,
-    required this.onSelect,
-  });
-
-  final List<AssessmentFolderModel> folders;
-  final String? currentFolderId;
-  final ValueChanged<String?> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(18, 12, 18, 24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // ── Drag handle ──
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Move to Folder',
-              style: TextStyle(
-                color: Color(0xFF1B3B22),
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Select a folder or remove from current folder',
-              style: TextStyle(
-                color: Color(0xFF607064),
-                fontSize: 13,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // ── "Remove from folder" option ──
-            if (currentFolderId != null) ...[
-              _FolderOption(
-                name: 'Remove from folder',
-                color: Colors.red,
-                icon: Icons.folder_off_rounded,
-                isSelected: false,
-                onTap: () => onSelect(null),
-              ),
-              const SizedBox(height: 8),
-              Divider(color: const Color(0xFFE5ECE7), height: 1),
-              const SizedBox(height: 8),
-            ],
-
-            // ── Folder options ──
-            ...folders.map(
-              (folder) => Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: _FolderOption(
-                  name: folder.name,
-                  color: assessmentColorFromHex(folder.colorHex),
-                  icon: Icons.folder_rounded,
-                  isSelected: folder.id == currentFolderId,
-                  onTap: () => onSelect(folder.id),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FolderOption extends StatelessWidget {
-  const _FolderOption({
-    required this.name,
-    required this.color,
-    required this.icon,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String name;
-  final Color color;
-  final IconData icon;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.08) : const Color(0xFFF8FAF8),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: isSelected ? color : const Color(0xFFE5ECE7),
-            width: isSelected ? 1.5 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                name,
-                style: TextStyle(
-                  color: color == Colors.red
-                      ? Colors.red
-                      : const Color(0xFF1B3B22),
-                  fontSize: 15,
-                  fontWeight: isSelected ? FontWeight.w800 : FontWeight.w700,
-                ),
-              ),
-            ),
-            if (isSelected)
-              Icon(Icons.check_circle_rounded, color: color, size: 22),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-// ═══════════════════════════════════════════════════════════════
-//  Detail Row
-// ═══════════════════════════════════════════════════════════════
-
-class _DetailRow extends StatelessWidget {
-  const _DetailRow({
-    required this.icon,
-    required this.label,
-    required this.value,
-    this.accentColor,
-  });
-
-  final IconData icon;
-  final String label;
-  final String value;
-  final Color? accentColor;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = accentColor ?? AppColors.primary;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(icon, color: color, size: 20),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style: const TextStyle(
-                    color: Color(0xFF77887D),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: Color(0xFF26382C),
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
             ),
           ),
         ],
