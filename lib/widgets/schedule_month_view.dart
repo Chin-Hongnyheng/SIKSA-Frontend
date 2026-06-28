@@ -139,8 +139,8 @@ class ScheduleMonthView extends StatelessWidget {
 
   Color _taskColor(ScheduleModel s) {
     try {
-      if (s.color == null || s.color!.isEmpty) return _accentColor;
-      final hex = s.color!.replaceAll('#', '');
+      if (s.color.isEmpty) return _accentColor;
+      final hex = s.color.replaceAll('#', '');
       final rrggbb = hex.length > 6 ? hex.substring(hex.length - 6) : hex;
       return Color(int.parse('FF$rrggbb', radix: 16));
     } catch (_) {

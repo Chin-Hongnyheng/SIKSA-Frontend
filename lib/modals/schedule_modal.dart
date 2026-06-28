@@ -1,9 +1,12 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../widgets/button.dart';
 import '../core/theme/app_colors.dart';
 import '../service/Schedule_service.dart';
 import '../service/Course_service.dart';
 import '../widgets/center_toast.dart';
+import '../widgets/loading.dart';
 
 Future<void> showCreateScheduleModal(
   BuildContext context, {
@@ -62,6 +65,10 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
   final ScheduleService _scheduleService = ScheduleService();
   final CourseService _courseService = CourseService();
+
+  // Image picker
+  File? _selectedCourseImage;
+  final ImagePicker _imagePicker = ImagePicker();
 
   String _recurrenceType = 'NONE';
   DateTime? _date;
@@ -126,6 +133,116 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
     {'label': '30 minutes before', 'value': 30},
     {'label': '1 hour before', 'value': 60},
   ];
+
+  int? _toMinutes(String? isoString) {
+    if (isoString == null || isoString.isEmpty) return null;
+    final dt = DateTime.tryParse(isoString);
+    if (dt != null) return dt.hour * 60 + dt.minute;
+    final parts = isoString.split(':');
+    if (parts.length >= 2) {
+      final h = int.tryParse(parts[0]);
+      final m = int.tryParse(parts[1]);
+      if (h != null && m != null) return h * 60 + m;
+    }
+    return null;
+  }
+
+  Future<void> _pickCourseImage() async {
+    final XFile? image = await _imagePicker.pickImage(
+      source: ImageSource.gallery,
+    );
+    if (image != null) {
+      setState(() => _selectedCourseImage = File(image.path));
+    }
+  }
+
+  Future<bool> _checkOverlapAndConfirm() async {
+    try {
+      final existing = await _scheduleService.getMySchedules();
+      if (existing.isEmpty) return true;
+
+      final newStartMin = _startTime!.hour * 60 + _startTime!.minute;
+      final newEndMin = _endTime!.hour * 60 + _endTime!.minute;
+
+      bool hasOverlap = false;
+      for (final s in existing) {
+        if (widget.scheduleId != null && s['scheduleId'] == widget.scheduleId) {
+          continue;
+        }
+
+        final existStartMin = _toMinutes(s['startTime'] as String?);
+        final existEndMin = _toMinutes(s['endTime'] as String?);
+        if (existStartMin == null || existEndMin == null) continue;
+
+        final overlaps = newStartMin < existEndMin && newEndMin > existStartMin;
+        if (overlaps) {
+          hasOverlap = true;
+          break;
+        }
+      }
+
+      if (!hasOverlap) return true;
+
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Colors.orange,
+                  size: 48,
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  'Schedule Conflict',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'This schedule overlaps with an existing one. Are you sure you want to continue?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: Colors.black54, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () => Navigator.pop(ctx, false),
+                        child: const Text('Cancel'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.orange,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: () => Navigator.pop(ctx, true),
+                        child: const Text('Continue'),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+
+      return confirmed == true;
+    } catch (_) {
+      return true;
+    }
+  }
 
   static const List<String> _weekDays = [
     'Monday',
@@ -256,7 +373,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       setState(() {});
       return;
     }
-
     try {
       final courseCode = _courseCodeController.text.trim();
       final courseName = _courseNameController.text.trim();
@@ -264,7 +380,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
       // ── Step 1: Create OR edit course ────────────────────────────────
       if (_isEditing) {
-        // Edit mode: update course name + description (courseCode is locked)
         await _courseService.editCourse(
           courseCode: courseCode,
           courseName: courseName,
@@ -272,22 +387,30 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
           description: description.isNotEmpty ? description : null,
         );
       } else {
-        // Create mode: create a new course
+        await _courseService.createCourse(
+          courseCode: courseCode,
+          courseName: courseName,
+          description: description.isNotEmpty ? description : null,
+        );
+      }
+
+      // ── Step 2: Upload course image if selected ───────────────────────
+      if (_selectedCourseImage != null) {
         try {
-          await _courseService.createCourse(
+          await _courseService.uploadCourseImage(
             courseCode: courseCode,
-            courseName: courseName,
-            description: description.isNotEmpty ? description : null,
+            imageFile: _selectedCourseImage!,
           );
         } catch (e) {
-          final msg = e.toString();
-          if (!msg.contains('already exists')) {
-            rethrow;
-          }
+          debugPrint('Course image upload failed: $e');
         }
       }
 
-      // ── Step 2: Create or edit schedule ───────────────────────────────
+      // ── Step 3: Check for schedule overlap ───────────────────────────
+      final shouldProceed = await _checkOverlapAndConfirm();
+      if (!shouldProceed) return;
+
+      // ── Step 4: Create or edit schedule ──────────────────────────────
       DateTime baseDate;
       if (_recurrenceType == 'NONE') {
         baseDate = _date!;
@@ -401,8 +524,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
     );
   }
 
-  /// Renders a text field. When [locked] is true the field is read-only and
-  /// visually dimmed so the user knows it cannot be changed.
   Widget _buildTextField({
     required TextEditingController controller,
     required String label,
@@ -511,6 +632,96 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                 Icon(Icons.arrow_drop_down, color: AppColors.primary),
               ],
             ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCourseImagePicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Course Image (optional)',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: AppColors.darkText,
+          ),
+        ),
+        const SizedBox(height: 8),
+        GestureDetector(
+          onTap: _pickCourseImage,
+          child: Container(
+            width: double.infinity,
+            height: 140,
+            decoration: BoxDecoration(
+              border: Border.all(color: AppColors.primary.withOpacity(0.3)),
+              borderRadius: BorderRadius.circular(12),
+              color: Colors.white,
+            ),
+            child: _selectedCourseImage != null
+                ? Stack(
+                    children: [
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.file(
+                          _selectedCourseImage!,
+                          width: double.infinity,
+                          height: 140,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                      // Change photo button overlay
+                      Positioned(
+                        bottom: 8,
+                        right: 8,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.black54,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.edit, color: Colors.white, size: 14),
+                              SizedBox(width: 4),
+                              Text(
+                                'Change',
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                : Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.add_photo_alternate_outlined,
+                        size: 36,
+                        color: AppColors.primary.withOpacity(0.5),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Tap to upload course image',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.primary.withOpacity(0.5),
+                        ),
+                      ),
+                    ],
+                  ),
           ),
         ),
       ],
@@ -783,7 +994,6 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             // ── COURSE INFO SECTION ──────────────────────────────────────
             _buildSectionHeader('Course Information', Icons.school_outlined),
 
-            // courseCode is locked in edit mode
             _buildTextField(
               controller: _courseCodeController,
               label: 'Course Code',
@@ -803,6 +1013,10 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
               hint: 'Brief description of the course',
               maxLines: 2,
             ),
+            const SizedBox(height: 12),
+
+            // ── COURSE IMAGE PICKER ──────────────────────────────────────
+            _buildCourseImagePicker(),
             const SizedBox(height: 20),
 
             // ── SCHEDULE SECTION ─────────────────────────────────────────

@@ -1,108 +1,53 @@
-import 'dart:convert';
-
-import 'package:flutter/foundation.dart';
-import 'package:http/http.dart' as http;
-
+import 'dart:async';
+import 'package:graphql_flutter/graphql_flutter.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../providers/auth_provider.dart';
 import '../models/attendance_session_model.dart';
 import '../models/attendance_record_model.dart';
 
 class AttendanceService {
-  static const String baseUrl = "http://127.0.0.1:3000/graphql";
-
-  static const String defaultCourseId = "course1";
-
-  Future<Map<String, dynamic>> _postGraphQL({
-    required String query,
-    Map<String, dynamic>? variables,
-  }) async {
-    debugPrint("CALLING GRAPHQL API: $baseUrl");
-    debugPrint("GRAPHQL VARIABLES: $variables");
-
-    final response = await http
-        .post(
-          Uri.parse(baseUrl),
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: jsonEncode({
-            "query": query,
-            "variables": variables ?? {},
-          }),
-        )
-        .timeout(const Duration(seconds: 25));
-
-    debugPrint("GRAPHQL STATUS: ${response.statusCode}");
-    debugPrint("GRAPHQL BODY: ${response.body}");
-
-    if (response.statusCode != 200) {
-      throw Exception("GraphQL request failed: ${response.body}");
-    }
-
-    final decoded = jsonDecode(response.body);
-
-    if (decoded is! Map<String, dynamic>) {
-      throw Exception("Invalid GraphQL response");
-    }
-
-    if (decoded["errors"] != null) {
-      throw Exception("GraphQL errors: ${decoded["errors"]}");
-    }
-
-    final data = decoded["data"];
-
-    if (data is! Map<String, dynamic>) {
-      throw Exception("GraphQL response has no data");
-    }
-
-    return data;
+  GraphQLClient _authClient() {
+    final Link authLink = HttpLink(
+      dotenv.env['GRAPHQL_URL']!,
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+    return GraphQLClient(link: authLink, cache: GraphQLCache());
   }
 
-  Future<List<Map<String, dynamic>>> getCourses() async {
-    return [
-      {
-        "_id": "course1",
-        "name": "Mobile",
-      },
-      {
-        "_id": "course2",
-        "name": "Web",
-      },
-    ];
+  Exception _exceptionFromResult(QueryResult result) {
+    final error = result.exception.toString();
+
+    if (error.contains('Unauthorized') || error.contains('UNAUTHENTICATED')) {
+      unawaited(AuthProvider.clearTokens());
+      return Exception('SESSION_EXPIRED');
+    }
+
+    final message = result.exception?.graphqlErrors.isNotEmpty == true
+        ? result.exception!.graphqlErrors.first.message
+        : error;
+
+    return Exception(message);
   }
 
-  Future<List<Map<String, dynamic>>> getStudentsFromCourse(
-    String courseId,
-  ) async {
-    return [
-      {
-        "_id": "student1",
-        "userName": "student1",
-      },
-      {
-        "_id": "student2",
-        "userName": "student2",
-      },
-      {
-        "_id": "student3",
-        "userName": "student3",
-      },
-    ];
-  }
+  // ─── Session Mutations ────────────────────────────────────────────────────
 
   Future<AttendanceSessionModel> createAttendanceSession({
-    required String courseId,
-    required String teacherId,
+    required String courseCode,
     required String title,
     required String date,
     required String startTime,
     required String endTime,
+    int passwordRefreshSeconds = 60,
+    int lateAfterMinutes = 15,
   }) async {
-    const mutation = r'''
-      mutation CreateAttendanceSession($input: CreateAttendanceSessionInput!) {
-        createAttendanceSession(input: $input) {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation CreateAttendanceSession(\$input: CreateAttendanceSessionInput!) {
+        createAttendanceSession(input: \$input) {
           id
-          courseId
-          teacherId
+          courseCode
+          createdBy
           title
           date
           startTime
@@ -114,42 +59,42 @@ class AttendanceService {
           isActive
         }
       }
-    ''';
+    """;
 
-    final data = await _postGraphQL(
-      query: mutation,
-      variables: {
-        "input": {
-          "courseId": courseId,
-          "teacherId": teacherId,
-          "title": title,
-          "date": date,
-          "startTime": startTime,
-          "endTime": endTime,
-          "passwordRefreshSeconds": 60,
-          "lateAfterMinutes": 15,
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          "input": {
+            "courseCode": courseCode,
+            "title": title,
+            "date": date,
+            "startTime": startTime,
+            "endTime": endTime,
+            "passwordRefreshSeconds": passwordRefreshSeconds,
+            "lateAfterMinutes": lateAfterMinutes,
+          },
         },
-      },
+      ),
     );
 
-    final result = data["createAttendanceSession"];
-
-    if (result is Map<String, dynamic>) {
-      return AttendanceSessionModel.fromJson(result);
-    }
-
-    throw Exception("Failed to create attendance session");
+    if (result.hasException) throw _exceptionFromResult(result);
+    return AttendanceSessionModel.fromJson(
+      Map<String, dynamic>.from(result.data!['createAttendanceSession']),
+    );
   }
 
   Future<AttendanceSessionModel> refreshAttendanceSessionPassword(
     String sessionId,
   ) async {
-    const mutation = r'''
-      mutation RefreshAttendanceSessionPassword($sessionId: String!) {
-        refreshAttendanceSessionPassword(sessionId: $sessionId) {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation RefreshAttendanceSessionPassword(\$sessionId: String!) {
+        refreshAttendanceSessionPassword(sessionId: \$sessionId) {
           id
-          courseId
-          teacherId
+          courseCode
+          createdBy
           title
           date
           startTime
@@ -161,33 +106,34 @@ class AttendanceService {
           isActive
         }
       }
-    ''';
+    """;
 
-    final data = await _postGraphQL(
-      query: mutation,
-      variables: {
-        "sessionId": sessionId,
-      },
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {"sessionId": sessionId},
+      ),
     );
 
-    final result = data["refreshAttendanceSessionPassword"];
-
-    if (result is Map<String, dynamic>) {
-      return AttendanceSessionModel.fromJson(result);
-    }
-
-    throw Exception("Failed to refresh attendance password");
+    if (result.hasException) throw _exceptionFromResult(result);
+    return AttendanceSessionModel.fromJson(
+      Map<String, dynamic>.from(
+        result.data!['refreshAttendanceSessionPassword'],
+      ),
+    );
   }
 
-  Future<List<AttendanceSessionModel>> getAttendanceSessionsByCourse(
-    String courseId,
+  Future<AttendanceSessionModel> closeAttendanceSession(
+    String sessionId,
   ) async {
-    const query = r'''
-      query AttendanceSessionsByCourse($courseId: String!) {
-        attendanceSessionsByCourse(courseId: $courseId) {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation CloseAttendanceSession(\$sessionId: String!) {
+        closeAttendanceSession(sessionId: \$sessionId) {
           id
-          courseId
-          teacherId
+          courseCode
+          createdBy
           title
           date
           startTime
@@ -199,54 +145,213 @@ class AttendanceService {
           isActive
         }
       }
-    ''';
+    """;
 
-    final data = await _postGraphQL(
-      query: query,
-      variables: {
-        "courseId": courseId,
-      },
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {"sessionId": sessionId},
+      ),
     );
 
-    final result = data["attendanceSessionsByCourse"];
-
-    if (result is List) {
-      return result
-          .map((item) => AttendanceSessionModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
-          .toList();
-    }
-
-    return [];
+    if (result.hasException) throw _exceptionFromResult(result);
+    return AttendanceSessionModel.fromJson(
+      Map<String, dynamic>.from(result.data!['closeAttendanceSession']),
+    );
   }
 
   Future<bool> deleteAttendanceSession(String sessionId) async {
-    const mutation = r'''
-      mutation DeleteAttendanceSession($sessionId: String!) {
-        deleteAttendanceSession(sessionId: $sessionId)
-      }
-    ''';
+    final authClient = _authClient();
 
-    final data = await _postGraphQL(
-      query: mutation,
-      variables: {
-        "sessionId": sessionId,
-      },
+    const String mutation = """
+      mutation DeleteAttendanceSession(\$sessionId: String!) {
+        deleteAttendanceSession(sessionId: \$sessionId)
+      }
+    """;
+
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {"sessionId": sessionId},
+      ),
     );
 
-    return data["deleteAttendanceSession"] == true;
+    if (result.hasException) throw _exceptionFromResult(result);
+    return result.data!['deleteAttendanceSession'] == true;
   }
+
+  // ─── Attendance Record Mutations ──────────────────────────────────────────
+
+  Future<AttendanceRecordModel> markAttendance({
+    required String studentId,
+    required String courseCode,
+    required String sessionId,
+    required String date,
+    String? status, // pass "absent" or "permission" to mark manually
+    String? checkIn, // required for present/late — backend derives status
+  }) async {
+    final authClient = _authClient();
+
+    const String mutation = """
+      mutation MarkAttendance(\$input: MarkAttendanceInput!) {
+        markAttendance(input: \$input) {
+          id
+          studentId
+          courseCode
+          sessionId
+          date
+          status
+          checkIn
+          checkOut
+          type
+          time
+        }
+      }
+    """;
+
+    final Map<String, dynamic> input = {
+      "studentId": studentId,
+      "courseCode": courseCode,
+      "sessionId": sessionId,
+      "date": date,
+    };
+
+    if (status != null) input["status"] = status;
+    if (checkIn != null) input["checkIn"] = checkIn;
+
+    final result = await authClient.mutate(
+      MutationOptions(document: gql(mutation), variables: {"input": input}),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return AttendanceRecordModel.fromJson(
+      Map<String, dynamic>.from(result.data!['markAttendance']),
+    );
+  }
+
+  // ─── Session Queries ──────────────────────────────────────────────────────
+
+  Future<List<AttendanceSessionModel>> getAttendanceSessionsByCourse(
+    String courseCode,
+  ) async {
+    final authClient = _authClient();
+
+    const String query = """
+      query AttendanceSessionsByCourse(\$courseCode: String!) {
+        attendanceSessionsByCourse(courseCode: \$courseCode) {
+          id
+          courseCode
+          createdBy
+          title
+          date
+          startTime
+          endTime
+          password
+          passwordExpiresAt
+          passwordRefreshSeconds
+          lateAfterMinutes
+          isActive
+        }
+      }
+    """;
+
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"courseCode": courseCode},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return (result.data!['attendanceSessionsByCourse'] as List)
+        .map(
+          (e) => AttendanceSessionModel.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<List<AttendanceSessionModel>> getActiveAttendanceSessionsByCourse(
+    String courseCode,
+  ) async {
+    final authClient = _authClient();
+
+    const String query = """
+      query ActiveAttendanceSessionsByCourse(\$courseCode: String!) {
+        activeAttendanceSessionsByCourse(courseCode: \$courseCode) {
+          id
+          courseCode
+          createdBy
+          title
+          date
+          startTime
+          endTime
+          password
+          passwordExpiresAt
+          passwordRefreshSeconds
+          lateAfterMinutes
+          isActive
+        }
+      }
+    """;
+
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"courseCode": courseCode},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return (result.data!['activeAttendanceSessionsByCourse'] as List)
+        .map(
+          (e) => AttendanceSessionModel.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<bool> verifyAttendanceSessionPassword({
+    required String sessionId,
+    required String password,
+  }) async {
+    final authClient = _authClient();
+
+    const String query = """
+      query VerifyAttendanceSessionPassword(\$sessionId: String!, \$password: String!) {
+        verifyAttendanceSessionPassword(sessionId: \$sessionId, password: \$password)
+      }
+    """;
+
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"sessionId": sessionId, "password": password},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return result.data!['verifyAttendanceSessionPassword'] == true;
+  }
+
+  // ─── Attendance Record Queries ────────────────────────────────────────────
 
   Future<List<AttendanceRecordModel>> getSessionAttendance(
     String sessionId,
   ) async {
-    const query = r'''
-      query SessionAttendance($sessionId: String!) {
-        sessionAttendance(sessionId: $sessionId) {
+    final authClient = _authClient();
+
+    const String query = """
+      query SessionAttendance(\$sessionId: String!) {
+        sessionAttendance(sessionId: \$sessionId) {
           id
           studentId
-          courseId
+          courseCode
           sessionId
           date
           status
@@ -256,37 +361,37 @@ class AttendanceService {
           time
         }
       }
-    ''';
+    """;
 
-    final data = await _postGraphQL(
-      query: query,
-      variables: {
-        "sessionId": sessionId,
-      },
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"sessionId": sessionId},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
     );
 
-    final result = data["sessionAttendance"];
-
-    if (result is List) {
-      return result
-          .map((item) => AttendanceRecordModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
-          .toList();
-    }
-
-    return [];
+    if (result.hasException) throw _exceptionFromResult(result);
+    return (result.data!['sessionAttendance'] as List)
+        .map(
+          (e) => AttendanceRecordModel.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
   }
 
-  Future<List<AttendanceRecordModel>> getStudentAttendanceRecords(
+  Future<List<AttendanceRecordModel>> getStudentAttendance(
     String studentId,
   ) async {
-    const query = r'''
-      query StudentAttendance($studentId: String!) {
-        studentAttendance(studentId: $studentId) {
+    final authClient = _authClient();
+
+    const String query = """
+      query StudentAttendance(\$studentId: String!) {
+        studentAttendance(studentId: \$studentId) {
           id
           studentId
-          courseId
+          courseCode
           sessionId
           date
           status
@@ -296,43 +401,37 @@ class AttendanceService {
           time
         }
       }
-    ''';
+    """;
 
-    final data = await _postGraphQL(
-      query: query,
-      variables: {
-        "studentId": studentId,
-      },
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"studentId": studentId},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
     );
 
-    final result = data["studentAttendance"];
-
-    if (result is List) {
-      return result
-          .map((item) => AttendanceRecordModel.fromJson(
-                Map<String, dynamic>.from(item as Map),
-              ))
-          .toList();
-    }
-
-    return [];
+    if (result.hasException) throw _exceptionFromResult(result);
+    return (result.data!['studentAttendance'] as List)
+        .map(
+          (e) => AttendanceRecordModel.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
   }
 
-  Future<void> markAttendance({
-    required String studentId,
-    required String courseId,
-    required String sessionId,
-    required String date,
-    required String status,
-    String? checkIn,
-    String? checkOut,
-  }) async {
-    const mutation = r'''
-      mutation MarkAttendance($input: MarkAttendanceInput!) {
-        markAttendance(input: $input) {
+  Future<List<AttendanceRecordModel>> getCourseAttendance(
+    String courseCode,
+  ) async {
+    final authClient = _authClient();
+
+    const String query = """
+      query CourseAttendance(\$courseCode: String!) {
+        courseAttendance(courseCode: \$courseCode) {
           id
           studentId
-          courseId
+          courseCode
           sessionId
           date
           status
@@ -342,21 +441,92 @@ class AttendanceService {
           time
         }
       }
-    ''';
+    """;
 
-    await _postGraphQL(
-      query: mutation,
-      variables: {
-        "input": {
-          "studentId": studentId,
-          "courseId": courseId,
-          "sessionId": sessionId,
-          "date": date,
-          "status": status,
-          "checkIn": checkIn,
-          "checkOut": checkOut,
-        },
-      },
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"courseCode": courseCode},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return (result.data!['courseAttendance'] as List)
+        .map(
+          (e) => AttendanceRecordModel.fromJson(
+            Map<String, dynamic>.from(e as Map),
+          ),
+        )
+        .toList();
+  }
+
+  Future<Map<String, int>> getStudentAttendanceSummary(String studentId) async {
+    final authClient = _authClient();
+
+    const String query = """
+      query StudentAttendanceSummary(\$studentId: String!) {
+        studentAttendanceSummary(studentId: \$studentId) {
+          present
+          late
+          absent
+          permission
+        }
+      }
+    """;
+
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"studentId": studentId},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    final data = result.data!['studentAttendanceSummary'];
+    return {
+      'present': data['present'] as int,
+      'late': data['late'] as int,
+      'absent': data['absent'] as int,
+      'permission': data['permission'] as int,
+    };
+  }
+
+  // Add this method inside AttendanceService class
+  Future<AttendanceSessionModel> getSessionById(String sessionId) async {
+    final authClient = _authClient();
+
+    const String query = """
+    query GetAttendanceSession(\$sessionId: String!) {
+      attendanceSession(sessionId: \$sessionId) {
+        id
+        courseCode
+        createdBy
+        title
+        date
+        startTime
+        endTime
+        password
+        passwordExpiresAt
+        passwordRefreshSeconds
+        lateAfterMinutes
+        isActive
+      }
+    }
+  """;
+
+    final result = await authClient.query(
+      QueryOptions(
+        document: gql(query),
+        variables: {"sessionId": sessionId},
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) throw _exceptionFromResult(result);
+    return AttendanceSessionModel.fromJson(
+      Map<String, dynamic>.from(result.data!['attendanceSession']),
     );
   }
 }

@@ -1,0 +1,54 @@
+{
+  "project_info": {
+    "project_number": "503081136683",
+    "project_id": "siksa-ba971",
+    "storage_bucket": "siksa-ba971.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:503081136683:android:507748f6045c65b3d2f06e",
+        "android_client_info": {
+          "package_name": "com.example.frontend"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "503081136683-kq8ehuin7k1a891qog6t0phsajie4qh9.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.frontend",
+            "certificate_hash": "9efb9a3581ec5578025d48b676cd4048b750ef33"
+          }
+        },
+        {
+          "client_id": "503081136683-pfavce8ik9tcpd79mfethstcjegpsc1c.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCciJMTLJVCCFSRyZpRfO0rbPajXBJeJUs"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "503081136683-mqg9n2mra3gvat8ufft881pigh63h5cp.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "503081136683-cjkjltanmrsd4t4dntv67i7cpoficj84.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.hongnyhengchin.frontend"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

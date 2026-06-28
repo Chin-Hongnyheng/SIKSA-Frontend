@@ -121,11 +121,11 @@ class _TaskCard extends StatelessWidget {
 
   Color _getTaskColor() {
     try {
-      if (task.color == null || task.color!.isEmpty) {
+      if (task.color.isEmpty) {
         return const Color(0xFF1E6B2D);
       }
 
-      final hex = task.color!.replaceAll('#', '');
+      final hex = task.color.replaceAll('#', '');
       final rrggbb = hex.length > 6 ? hex.substring(hex.length - 6) : hex;
 
       return Color(int.parse('FF$rrggbb', radix: 16));

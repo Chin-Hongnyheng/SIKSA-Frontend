@@ -4,12 +4,15 @@ class PhoneTextField extends StatefulWidget {
   final String label;
   final String hint;
   final TextEditingController controller;
+  final String?
+  initialValue; // full number e.g. "855912345678" or "+855912345678"
 
   const PhoneTextField({
     super.key,
     this.label = "Phone Number",
     this.hint = "Enter phone number",
     required this.controller,
+    this.initialValue,
   });
 
   @override
@@ -41,7 +44,35 @@ class _PhoneTextFieldState extends State<PhoneTextField> {
       });
     });
 
+    // Parse initialValue BEFORE attaching the listener,
+    // so we don't trigger _updateFullPhoneNumber while splitting.
+    if (widget.initialValue != null && widget.initialValue!.isNotEmpty) {
+      // Strip any leading "+" so comparisons are consistent either way.
+      final raw = widget.initialValue!.trim().replaceAll('+', '');
+
+      // Sort codes longest-first so "+855" is checked before any shorter overlap.
+      final sortedCountries = [...countries]
+        ..sort((a, b) => b["code"]!.length.compareTo(a["code"]!.length));
+
+      final match = sortedCountries.firstWhere(
+        (c) => raw.startsWith(c["code"]!.replaceAll('+', '')),
+        orElse: () => countries.first,
+      );
+
+      countryCode = match["code"]!;
+      final codeDigits = match["code"]!.replaceAll('+', '');
+
+      _phoneOnlyController.text = raw.startsWith(codeDigits)
+          ? raw.substring(codeDigits.length)
+          : raw;
+    }
+
+    // Attach listener AFTER initial split, so typing updates the combined value
+    // but the initial prefill doesn't get double-processed.
     _phoneOnlyController.addListener(_updateFullPhoneNumber);
+
+    // Sync the combined controller once, after state is set.
+    _updateFullPhoneNumber();
   }
 
   @override
@@ -62,7 +93,6 @@ class _PhoneTextFieldState extends State<PhoneTextField> {
     setState(() {
       countryCode = value!;
     });
-    // Update the full phone number when country code changes
     _updateFullPhoneNumber();
   }
 

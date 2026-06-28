@@ -202,4 +202,41 @@ class ScheduleService {
     }
     return result.data!['getMySchedules'];
   }
+
+  // ── NEW: Schedules from every course the user is enrolled in ──────────────
+  Future<List<dynamic>> getEnrolledSchedules() async {
+    final client = await _getAuthClient();
+
+    const String query = """
+      query GetEnrolledSchedules {
+        getEnrolledSchedules {
+          scheduleId
+          courseCode
+          location
+          startTime
+          endTime
+          recurrenceType
+          date
+          startDate
+          endDate
+          color
+          reminder
+          selectedDays
+        }
+      }
+    """;
+
+    final result = await client.query(QueryOptions(document: gql(query)));
+
+    if (result.hasException) {
+      final error = result.exception.toString();
+      if (error.contains("Unauthorized") || error.contains('UNAUTHORIZED')) {
+        await AuthProvider.clearTokens();
+        throw Exception('SESSION_EXPIRED');
+      }
+      throw Exception(error);
+    }
+
+    return result.data!['getEnrolledSchedules'];
+  }
 }

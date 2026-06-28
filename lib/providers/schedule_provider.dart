@@ -15,9 +15,29 @@ class ScheduleProvider extends ChangeNotifier {
     isLoading = true;
     error = null;
     notifyListeners();
+
     try {
-      final result = await _scheduleService.getMySchedules();
-      _schedules = result.map((e) => ScheduleModel.fromMap(e)).toList();
+      final results = await Future.wait([
+        _scheduleService.getMySchedules(),
+        _scheduleService.getEnrolledSchedules(),
+      ]);
+
+      final seen = <String>{};
+      final merged = <ScheduleModel>[];
+
+      // Tag own schedules
+      for (final raw in results[0]) {
+        final model = ScheduleModel.fromMap(raw).copyWith(source: 'own');
+        if (seen.add(model.scheduleId)) merged.add(model);
+      }
+
+      // Tag enrolled schedules (skip if already added as own)
+      for (final raw in results[1]) {
+        final model = ScheduleModel.fromMap(raw).copyWith(source: 'enrolled');
+        if (seen.add(model.scheduleId)) merged.add(model);
+      }
+
+      _schedules = merged;
     } catch (e) {
       error = e.toString();
       debugPrint('Load Schedules error: $e');
@@ -60,5 +80,12 @@ class ScheduleProvider extends ChangeNotifier {
       debugPrint('Edit error: $e');
       notifyListeners();
     }
+  }
+
+  void reset() {
+    _schedules = [];
+    isLoading = false;
+    error = null;
+    notifyListeners();
   }
 }

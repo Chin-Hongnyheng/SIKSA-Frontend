@@ -3,6 +3,9 @@
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../providers/auth_provider.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
 
 class GraphQLService {
   late GraphQLClient client;
@@ -22,6 +25,7 @@ class GraphQLService {
     required String password,
     required String confirm,
     required String role,
+    t,
   }) async {
     const String mutation = """
       mutation Register(\$input: CreateRegisterInput!) {
@@ -84,7 +88,12 @@ class GraphQLService {
     );
 
     if (result.hasException) {
-      throw Exception(result.exception.toString());
+      final exception = result.exception;
+
+      final message = (exception?.graphqlErrors.isNotEmpty == true)
+          ? exception!.graphqlErrors.first.message
+          : exception.toString();
+      throw message;
     }
 
     await AuthProvider.saveTokens(
@@ -118,8 +127,6 @@ class GraphQLService {
         gender
         address
         photo_url
-        notification
-        language
       }
     }
   """;
@@ -245,11 +252,10 @@ class GraphQLService {
 
   Future<Map<String, dynamic>> update({
     required String userName,
+    required String? phone,
     required String? dob,
     required String gender,
     required String address,
-    required String notification,
-    required String language,
   }) async {
     final Link authLink = HttpLink(
       dotenv.env['GRAPHQL_URL']!,
@@ -273,8 +279,6 @@ class GraphQLService {
         gender
         address
         photo_url
-        notification
-        language
       }
     }
   }
@@ -284,11 +288,10 @@ class GraphQLService {
       variables: {
         "input": {
           "userName": userName,
+          "phone": phone != null ? int.parse(phone) : null,
           "dob": dob,
           "gender": gender,
           "address": address,
-          "notification": notification,
-          "language": language,
         },
       },
     );
@@ -306,107 +309,45 @@ class GraphQLService {
     return result.data!['updateProfile'];
   }
 
-  Future<List<Map<String, dynamic>>> getAllMyAssessments() async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
+  Future<String> uploadPhoto({
+    required String userId,
+    required File imageFile,
+  }) async {
+    final uri = Uri.parse('${dotenv.env['BASE_URL']}/auth/users/$userId/photo');
 
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
+    final request = http.MultipartRequest('PATCH', uri)
+      ..headers['Authorization'] = 'Bearer ${AuthProvider.accessToken}'
+      ..files.add(await http.MultipartFile.fromPath('photo', imageFile.path));
 
-    const String query = """
-    query GetAllMyAssessments {
-      getAllMyAssessments {
-        assessmentName
-        courseCode
-        createdBy
-        createdAt
-      }
-    }
-  """;
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    final json = jsonDecode(body);
 
-    final result = await authClient.query(QueryOptions(document: gql(query)));
-
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
+    if (response.statusCode != 200) {
+      throw Exception(json['message'] ?? 'Upload failed');
     }
 
-    final List assessments = result.data?['getAllMyAssessments'] ?? [];
-    return assessments
-        .map<Map<String, dynamic>>((a) => Map<String, dynamic>.from(a as Map))
-        .toList();
+    return json['photo_url'];
   }
 
-  Future<List<Map<String, dynamic>>> getAssessmentsByCourseCode({
-    required String courseCode,
+  Future<String> googleAuth({
+    required String idToken,
+    required String role,
   }) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
-
-    const String query = """
-    query GetAssessmentsByCourseCode(
-      \$courseCode: String!
-    ) {
-      getAssessmentsByCourseCode(courseCode: \$courseCode) {
-        assessmentName
-        courseCode
-        createdBy
-        createdAt
-      }
-    }
-  """;
-
-    final result = await authClient.query(
-      QueryOptions(document: gql(query), variables: {"courseCode": courseCode}),
-    );
-
-    if (result.hasException) {
-      throw Exception(result.exception.toString());
-    }
-
-    final List assessments = result.data?['getAssessmentsByCourseCode'] ?? [];
-    return assessments
-        .map<Map<String, dynamic>>((a) => Map<String, dynamic>.from(a as Map))
-        .toList();
-  }
-
-  Future<String> createAssessment({
-    required String courseCode,
-    required String assessmentName,
-  }) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
-    );
-
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
-
     const String mutation = """
-    mutation CreateAssessment(\$input: CreateAssessmentInput!) {
-      createAssessment(input: \$input) {
-        message
+    mutation GoogleAuth(\$input: GoogleAuthInput!) {
+      googleAuth(input: \$input) {
+        accessToken
+        refreshToken
       }
     }
   """;
 
-    final result = await authClient.mutate(
+    final result = await client.mutate(
       MutationOptions(
         document: gql(mutation),
         variables: {
-          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
+          "input": {"idToken": idToken, "role": role},
         },
       ),
     );
@@ -419,48 +360,11 @@ class GraphQLService {
       throw message;
     }
 
-    return result.data!['createAssessment']['message'];
-  }
-
-  Future<String> deleteAssessment({
-    required String courseCode,
-    required String assessmentName,
-  }) async {
-    final Link authLink = HttpLink(
-      dotenv.env['GRAPHQL_URL']!,
-      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    await AuthProvider.saveTokens(
+      accessToken: result.data!['googleAuth']['accessToken'],
+      refreshToken: result.data!['googleAuth']['refreshToken'],
     );
 
-    final GraphQLClient authClient = GraphQLClient(
-      link: authLink,
-      cache: GraphQLCache(),
-    );
-
-    const String mutation = """
-    mutation DeleteAssessment(\$input: DeleteAssessmentInput!) {
-      deleteAssessment(input: \$input) {
-        message
-      }
-    }
-  """;
-
-    final result = await authClient.mutate(
-      MutationOptions(
-        document: gql(mutation),
-        variables: {
-          "input": {"courseCode": courseCode, "assessmentName": assessmentName},
-        },
-      ),
-    );
-
-    if (result.hasException) {
-      final exception = result.exception;
-      final message = (exception?.graphqlErrors.isNotEmpty == true)
-          ? exception!.graphqlErrors.first.message
-          : exception.toString();
-      throw message;
-    }
-
-    return result.data!['deleteAssessment']['message'];
+    return AuthProvider.accessToken!;
   }
 }

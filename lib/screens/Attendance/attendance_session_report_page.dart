@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-
+import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../../core/theme/app_colors.dart';
 import '../../models/attendance_session_model.dart';
 import '../../models/attendance_record_model.dart';
-import '../../service/attendance_service.dart';
+import '../../providers/attendance_provider.dart';
+import '../../service/course_service.dart';
+import '../../widgets/floating_line_background.dart';
 import '../../widgets/student_mini_dashboard.dart';
-import 'session_attendance_page.dart';
 
 class AttendanceSessionReportPage extends StatefulWidget {
   final AttendanceSessionModel session;
 
-  const AttendanceSessionReportPage({
-    super.key,
-    required this.session,
-  });
+  const AttendanceSessionReportPage({super.key, required this.session});
 
   @override
   State<AttendanceSessionReportPage> createState() =>
@@ -21,7 +21,7 @@ class AttendanceSessionReportPage extends StatefulWidget {
 
 class _AttendanceSessionReportPageState
     extends State<AttendanceSessionReportPage> {
-  final AttendanceService attendanceService = AttendanceService();
+  final CourseService _courseService = CourseService();
 
   bool isLoading = true;
   String? errorMessage;
@@ -42,22 +42,25 @@ class _AttendanceSessionReportPageState
     });
 
     try {
-      final studentData =
-          await attendanceService.getStudentsFromCourse(widget.session.courseId);
-
-      final recordData =
-          await attendanceService.getSessionAttendance(widget.session.id);
+      final provider = context.read<AttendanceProvider>();
+      final rawStudents = await _courseService.getCourseSubscribers(
+        widget.session.courseCode,
+      );
+      await provider.loadSessionAttendance(widget.session.id);
 
       if (!mounted) return;
 
       setState(() {
-        students = studentData;
-        records = recordData;
+        students = (rawStudents as List)
+            .map<Map<String, dynamic>>(
+              (s) => Map<String, dynamic>.from(s as Map),
+            )
+            .toList();
+        records = List.from(provider.sessionRecords);
         isLoading = false;
       });
     } catch (e) {
       if (!mounted) return;
-
       setState(() {
         errorMessage = e.toString();
         isLoading = false;
@@ -65,49 +68,53 @@ class _AttendanceSessionReportPageState
     }
   }
 
-  AttendanceRecordModel? findRecordByStudentId(String studentId) {
-    for (final record in records) {
-      if (record.studentId == studentId) {
-        return record;
-      }
-    }
-    return null;
+  Future<void> _openEditPage() async {
+    final provider = context.read<AttendanceProvider>();
+
+    // Use Navigator.push — properly awaits until page is popped
+    await context.push('/attendance/home/list/create/${widget.session.id}');
+
+    if (!mounted) return;
+    await provider.loadSessionAttendance(widget.session.id);
+    if (!mounted) return;
+    // Read directly from provider — no re-fetch, trust what edit page saved
+    setState(() {
+      records = List.from(provider.sessionRecords);
+    });
   }
 
-  String calculateTotalTime(String? checkIn, String? checkOut) {
+  AttendanceRecordModel? _findRecord(String studentId) {
+    try {
+      return records.firstWhere((r) => r.studentId == studentId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String _totalTime(String? checkIn, String? checkOut) {
     if (checkIn == null || checkOut == null) return '-';
     if (checkIn.isEmpty || checkOut.isEmpty) return '-';
-
     try {
-      final startParts = checkIn.split(':');
-      final endParts = checkOut.split(':');
-
-      final startHour = int.parse(startParts[0]);
-      final startMinute = int.parse(startParts[1]);
-
-      final endHour = int.parse(endParts[0]);
-      final endMinute = int.parse(endParts[1]);
-
-      final start = Duration(hours: startHour, minutes: startMinute);
-      final end = Duration(hours: endHour, minutes: endMinute);
-
+      final sp = checkIn.split(':');
+      final ep = checkOut.split(':');
+      final start = Duration(
+        hours: int.parse(sp[0]),
+        minutes: int.parse(sp[1]),
+      );
+      final end = Duration(hours: int.parse(ep[0]), minutes: int.parse(ep[1]));
       final diff = end - start;
-
       if (diff.isNegative) return '-';
-
-      final hours = diff.inHours;
-      final minutes = diff.inMinutes.remainder(60);
-
-      if (hours == 0) return '${minutes}m';
-      if (minutes == 0) return '${hours}h';
-
-      return '${hours}h ${minutes}m';
+      final h = diff.inHours;
+      final m = diff.inMinutes.remainder(60);
+      if (h == 0) return '${m}m';
+      if (m == 0) return '${h}h';
+      return '${h}h ${m}m';
     } catch (_) {
       return '-';
     }
   }
 
-  Color statusColor(String status) {
+  Color _statusColor(String status) {
     switch (status.toLowerCase()) {
       case 'present':
         return Colors.green;
@@ -122,133 +129,185 @@ class _AttendanceSessionReportPageState
     }
   }
 
-  String statusText(String status) {
+  String _statusText(String status) {
     if (status.isEmpty) return 'Not marked';
     return status[0].toUpperCase() + status.substring(1);
   }
 
-  void openMiniDashboard(Map<String, dynamic> student) {
-    final studentId = student['_id']?.toString() ?? '';
+  String _getSessionStatus() {
+    if (!widget.session.isActive) return 'Closed';
+    try {
+      final now = DateTime.now();
+      final sp = widget.session.startTime.split(':');
+      final ep = widget.session.endTime.split(':');
+      final start = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        int.parse(sp[0]),
+        int.parse(sp[1]),
+      );
+      final end = DateTime(
+        now.year,
+        now.month,
+        now.day,
+        int.parse(ep[0]),
+        int.parse(ep[1]),
+      );
+      if (now.isBefore(start)) return 'Upcoming';
+      if (now.isAfter(end)) return 'Finished';
+      return 'Active';
+    } catch (_) {
+      return 'Unknown';
+    }
+  }
+
+  void _openMiniDashboard(Map<String, dynamic> student) {
+    final studentId = student['id']?.toString() ?? '';
     final studentName = student['userName']?.toString() ?? studentId;
 
     showDialog(
       context: context,
-      builder: (context) {
-        return Dialog(
-          insetPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 24,
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.86,
           ),
-          shape: RoundedRectangleBorder(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF2F2F2),
             borderRadius: BorderRadius.circular(20),
           ),
-          child: Container(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.86,
-            ),
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF2F2F2),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '$studentName Attendance',
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '$studentName Attendance',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.pop(context),
-                      icon: const Icon(Icons.close),
-                    ),
-                  ],
-                ),
-                const Divider(),
-                Flexible(
-                  child: SingleChildScrollView(
-                    child: StudentMiniDashboard(
-                      studentId: studentId,
-                      studentName: studentName,
-                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(context),
+                    icon: const Icon(Icons.close),
+                  ),
+                ],
+              ),
+              const Divider(),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: StudentMiniDashboard(
+                    studentId: studentId,
+                    studentName: studentName,
+                    courseCode: widget.session.courseCode,
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        );
-      },
-    );
-  }
-
-  Future<void> openEditPage() async {
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => SessionAttendancePage(
-          session: widget.session.toJson(),
         ),
       ),
     );
-
-    await loadReport();
   }
 
-  Widget buildSummaryHeader() {
-    int present = 0;
-    int late = 0;
-    int absent = 0;
-    int permission = 0;
-
-    for (final record in records) {
-      final status = record.status.toLowerCase();
-
-      if (status == 'present') present++;
-      if (status == 'late') late++;
-      if (status == 'absent') absent++;
-      if (status == 'permission') permission++;
+  Widget _summaryHeader() {
+    int present = 0, late = 0, absent = 0, permission = 0;
+    for (final r in records) {
+      switch (r.status?.toLowerCase()) {
+        case 'present':
+          present++;
+          break;
+        case 'late':
+          late++;
+          break;
+        case 'absent':
+          absent++;
+          break;
+        case 'permission':
+          permission++;
+          break;
+      }
     }
+
+    final sessionStatus = _getSessionStatus();
+    final statusColors = {
+      'Active': Colors.green,
+      'Upcoming': Colors.orange,
+      'Finished': Colors.red,
+      'Closed': Colors.grey,
+      'Unknown': Colors.grey,
+    };
+    final badgeColor = statusColors[sessionStatus] ?? Colors.grey;
 
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.only(bottom: 16),
       decoration: BoxDecoration(
-        color: Colors.green.withOpacity(0.10),
+        color: AppColors.secondary.withOpacity(0.12),
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.green.withOpacity(0.5)),
+        border: Border.all(color: AppColors.primary.withOpacity(0.4)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            widget.session.title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            '${widget.session.date} • ${widget.session.startTime} - ${widget.session.endTime}',
-            style: const TextStyle(color: Colors.black87),
-          ),
-          const SizedBox(height: 12),
           Row(
             children: [
-              Expanded(child: miniCount('Present', present, Colors.green)),
+              Expanded(
+                child: Text(
+                  widget.session.title,
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: badgeColor.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: badgeColor),
+                ),
+                child: Text(
+                  sessionStatus,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: badgeColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${widget.session.courseCode}  •  ${widget.session.date}  •  '
+            '${widget.session.startTime} – ${widget.session.endTime}',
+            style: TextStyle(fontSize: 13, color: Colors.grey[700]),
+          ),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(child: _miniCount('Present', present, Colors.green)),
               const SizedBox(width: 8),
-              Expanded(child: miniCount('Late', late, Colors.orange)),
+              Expanded(child: _miniCount('Late', late, Colors.orange)),
               const SizedBox(width: 8),
-              Expanded(child: miniCount('Absent', absent, Colors.red)),
+              Expanded(child: _miniCount('Absent', absent, Colors.red)),
               const SizedBox(width: 8),
-              Expanded(child: miniCount('Permission', permission, Colors.blue)),
+              Expanded(
+                child: _miniCount('Permission', permission, Colors.blue),
+              ),
             ],
           ),
         ],
@@ -256,7 +315,7 @@ class _AttendanceSessionReportPageState
     );
   }
 
-  Widget miniCount(String label, int value, Color color) {
+  Widget _miniCount(String label, int value, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(vertical: 10),
       decoration: BoxDecoration(
@@ -287,14 +346,12 @@ class _AttendanceSessionReportPageState
     );
   }
 
-  Widget buildTableHeader() {
+  Widget _tableHeader() {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.grey.shade300,
-        borderRadius: const BorderRadius.vertical(
-          top: Radius.circular(14),
-        ),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
       ),
       child: const Row(
         children: [
@@ -328,36 +385,30 @@ class _AttendanceSessionReportPageState
           ),
           Expanded(
             flex: 2,
-            child: Text(
-              'Total',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
+            child: Text('Total', style: TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
     );
   }
 
-  Widget buildStudentRow(Map<String, dynamic> student, int index) {
-    final studentId = student['_id']?.toString() ?? '';
+  Widget _studentRow(Map<String, dynamic> student, int index) {
+    final studentId = student['id']?.toString() ?? '';
     final studentName = student['userName']?.toString() ?? studentId;
-
-    final record = findRecordByStudentId(studentId);
+    final record = _findRecord(studentId);
 
     final status = record?.status ?? '';
     final checkIn = record?.checkIn ?? '-';
     final checkOut = record?.checkOut ?? '-';
-    final total = calculateTotalTime(record?.checkIn, record?.checkOut);
+    final total = _totalTime(record?.checkIn, record?.checkOut);
 
     return InkWell(
-      onTap: () => openMiniDashboard(student),
+      onTap: () => _openMiniDashboard(student),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
         decoration: BoxDecoration(
           color: index.isEven ? Colors.white : Colors.grey.shade50,
-          border: Border(
-            bottom: BorderSide(color: Colors.grey.shade300),
-          ),
+          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
         ),
         child: Row(
           children: [
@@ -399,15 +450,15 @@ class _AttendanceSessionReportPageState
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: statusColor(status).withOpacity(0.12),
+                    color: _statusColor(status).withOpacity(0.12),
                     borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: statusColor(status)),
+                    border: Border.all(color: _statusColor(status)),
                   ),
                   child: Text(
-                    statusText(status),
+                    _statusText(status),
                     style: TextStyle(
                       fontSize: 11,
-                      color: statusColor(status),
+                      color: _statusColor(status),
                       fontWeight: FontWeight.bold,
                     ),
                   ),
@@ -423,7 +474,7 @@ class _AttendanceSessionReportPageState
     );
   }
 
-  Widget buildTable() {
+  Widget _buildTable() {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
@@ -432,16 +483,14 @@ class _AttendanceSessionReportPageState
       ),
       child: Column(
         children: [
-          buildTableHeader(),
+          _tableHeader(),
           if (students.isEmpty)
             const Padding(
               padding: EdgeInsets.all(24),
               child: Text('No students found'),
             )
           else
-            ...students.asMap().entries.map(
-                  (entry) => buildStudentRow(entry.value, entry.key),
-                ),
+            ...students.asMap().entries.map((e) => _studentRow(e.value, e.key)),
         ],
       ),
     );
@@ -449,59 +498,99 @@ class _AttendanceSessionReportPageState
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
+
     return Scaffold(
-      backgroundColor: const Color(0xFFF5F5F5),
-      appBar: AppBar(
-        backgroundColor: Colors.green,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: const Text(
-          'Attendance Report',
-          style: TextStyle(color: Colors.white),
-        ),
-        actions: [
-          IconButton(
-            onPressed: openEditPage,
-            icon: const Icon(Icons.edit, color: Colors.white),
-            tooltip: 'Edit attendance',
+      backgroundColor: Colors.transparent,
+      floatingActionButton: FloatingActionButton(
+        onPressed: _openEditPage,
+        backgroundColor: AppColors.primary,
+        tooltip: 'Edit Attendance',
+        child: const Icon(Icons.edit, size: 28),
+      ),
+      body: Stack(
+        children: [
+          const Positioned.fill(
+            child: FloatingLinesBackground(
+              colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
+              lineCount: 6,
+              animationSpeed: 0.5,
+            ),
           ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: openEditPage,
-        backgroundColor: Colors.green,
-        icon: const Icon(Icons.edit, color: Colors.white),
-        label: const Text(
-          'Edit',
-          style: TextStyle(color: Colors.white),
-        ),
-      ),
-      body: RefreshIndicator(
-        onRefresh: loadReport,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            buildSummaryHeader(),
-            if (isLoading)
-              const Padding(
-                padding: EdgeInsets.only(top: 60),
-                child: Center(child: CircularProgressIndicator()),
-              )
-            else if (errorMessage != null)
-              Text(
-                errorMessage!,
-                style: const TextStyle(color: Colors.red),
-              )
-            else
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: SizedBox(
-                  width: 900,
-                  child: buildTable(),
+          Positioned(
+            top: topPadding + 70,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.white),
+              child: RefreshIndicator(
+                onRefresh: loadReport,
+                child: ListView(
+                  padding: const EdgeInsets.all(16),
+                  children: [
+                    _summaryHeader(),
+                    if (isLoading)
+                      const Padding(
+                        padding: EdgeInsets.only(top: 60),
+                        child: Center(child: CircularProgressIndicator()),
+                      )
+                    else if (errorMessage != null)
+                      Container(
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withOpacity(0.07),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.shade300),
+                        ),
+                        child: Text(
+                          errorMessage!,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      )
+                    else
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(width: 900, child: _buildTable()),
+                      ),
+                    const SizedBox(height: 80),
+                  ],
                 ),
               ),
-            const SizedBox(height: 80),
-          ],
-        ),
+            ),
+          ),
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                      color: Colors.white,
+                    ),
+                    const Expanded(
+                      child: Text(
+                        'Attendance Report',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 48),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
