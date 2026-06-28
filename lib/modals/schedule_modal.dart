@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/button.dart';
 import '../core/theme/app_colors.dart';
-import '../service/Schedule_service.dart';
-import '../service/Course_service.dart';
+import '../service/schedule_service.dart';
+import '../service/course_service.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/loading.dart';
 

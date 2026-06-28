@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../core/theme/app_colors.dart';
-import '../service/OTP_service.dart';
+import '../service/otp_service.dart';
 import '../widgets/center_toast.dart';
 
 class OtpField extends StatefulWidget {

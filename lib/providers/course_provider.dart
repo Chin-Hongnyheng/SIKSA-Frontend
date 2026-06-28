@@ -2,7 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import '../models/course_model.dart';
-import '../service/Course_service.dart';
+import '../service/course_service.dart';
 
 class CourseProvider extends ChangeNotifier {
   final CourseService _courseService = CourseService();

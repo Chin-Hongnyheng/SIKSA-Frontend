@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/schedule_model.dart';
-import '../service/Schedule_service.dart';
+import '../service/schedule_service.dart';
 
 class ScheduleProvider extends ChangeNotifier {
   final ScheduleService _scheduleService = ScheduleService();
