@@ -108,7 +108,9 @@ class _CreateFolderModalState extends State<CreateFolderModal> {
                     shape: BoxShape.circle,
                   ),
                   child: Icon(
-                    _isEditing ? Icons.edit_rounded : Icons.create_new_folder_rounded,
+                    _isEditing
+                        ? Icons.edit_rounded
+                        : Icons.create_new_folder_rounded,
                     color: AppColors.secondary,
                     size: 22,
                   ),
@@ -257,7 +259,11 @@ class _CreateFolderModalState extends State<CreateFolderModal> {
                           color: Colors.white,
                         ),
                       )
-                    : Icon(_isEditing ? Icons.save_rounded : Icons.create_new_folder_rounded),
+                    : Icon(
+                        _isEditing
+                            ? Icons.save_rounded
+                            : Icons.create_new_folder_rounded,
+                      ),
                 label: Text(_isEditing ? 'Save Changes' : 'Create Folder'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,

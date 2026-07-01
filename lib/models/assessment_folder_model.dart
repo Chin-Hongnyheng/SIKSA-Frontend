@@ -37,19 +37,20 @@ class AssessmentFolderModel {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'colorHex': colorHex,
-        'assessmentKeys': assessmentKeys,
-        'order': order,
-      };
+    'id': id,
+    'name': name,
+    'colorHex': colorHex,
+    'assessmentKeys': assessmentKeys,
+    'order': order,
+  };
 
   factory AssessmentFolderModel.fromJson(Map<String, dynamic> json) {
     return AssessmentFolderModel(
       id: json['id'] as String,
       name: json['name'] as String,
       colorHex: json['colorHex'] as String,
-      assessmentKeys: (json['assessmentKeys'] as List<dynamic>?)
+      assessmentKeys:
+          (json['assessmentKeys'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           [],
@@ -66,7 +67,9 @@ class AssessmentFolderModel {
   static List<AssessmentFolderModel> decodeList(String jsonString) {
     final list = jsonDecode(jsonString) as List<dynamic>;
     return list
-        .map((e) => AssessmentFolderModel.fromJson(Map<String, dynamic>.from(e)))
+        .map(
+          (e) => AssessmentFolderModel.fromJson(Map<String, dynamic>.from(e)),
+        )
         .toList();
   }
 }

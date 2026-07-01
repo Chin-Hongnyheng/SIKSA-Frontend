@@ -107,7 +107,9 @@ class AssessmentProvider extends ChangeNotifier {
       }
     }
     // Remove stale keys
-    final currentKeys = _allAssessments.map((a) => '${a.courseCode}|${a.assessmentName}').toSet();
+    final currentKeys = _allAssessments
+        .map((a) => '${a.courseCode}|${a.assessmentName}')
+        .toSet();
     final previousLength = _customAssessmentOrder.length;
     _customAssessmentOrder.removeWhere((key) => !currentKeys.contains(key));
     if (changed || _customAssessmentOrder.length != previousLength) {
@@ -203,7 +205,9 @@ class AssessmentProvider extends ChangeNotifier {
     try {
       final result = await _assessmentService.getMyAssessmentFolders();
       _folders = result
-          .map((e) => AssessmentFolderModel.fromJson(Map<String, dynamic>.from(e)))
+          .map(
+            (e) => AssessmentFolderModel.fromJson(Map<String, dynamic>.from(e)),
+          )
           .toList();
       _folders.sort((a, b) => a.order.compareTo(b.order));
 
@@ -214,12 +218,17 @@ class AssessmentProvider extends ChangeNotifier {
         final localFolders = AssessmentFolderModel.decodeList(jsonStr);
         if (localFolders.isNotEmpty) {
           for (final localFolder in localFolders) {
-            final newFolderData = await _assessmentService.createAssessmentFolder(
-              name: localFolder.name,
-              colorHex: localFolder.colorHex,
-              assessmentKeys: localFolder.assessmentKeys,
+            final newFolderData = await _assessmentService
+                .createAssessmentFolder(
+                  name: localFolder.name,
+                  colorHex: localFolder.colorHex,
+                  assessmentKeys: localFolder.assessmentKeys,
+                );
+            _folders.add(
+              AssessmentFolderModel.fromJson(
+                Map<String, dynamic>.from(newFolderData),
+              ),
             );
-            _folders.add(AssessmentFolderModel.fromJson(Map<String, dynamic>.from(newFolderData)));
           }
           await prefs.remove(_folderStorageKey);
         }
@@ -254,35 +263,49 @@ class AssessmentProvider extends ChangeNotifier {
 
   Future<void> _saveSortPreferences() async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_customOrderStorageKey, jsonEncode(_customAssessmentOrder));
+    await prefs.setString(
+      _customOrderStorageKey,
+      jsonEncode(_customAssessmentOrder),
+    );
   }
 
   void sortAssessmentsAlphabetically() {
     final list = List<AssessmentModel>.from(_allAssessments);
-    list.sort((a, b) => a.assessmentName.toLowerCase().compareTo(b.assessmentName.toLowerCase()));
-    _customAssessmentOrder = list.map((a) => '${a.courseCode}|${a.assessmentName}').toList();
+    list.sort(
+      (a, b) => a.assessmentName.toLowerCase().compareTo(
+        b.assessmentName.toLowerCase(),
+      ),
+    );
+    _customAssessmentOrder = list
+        .map((a) => '${a.courseCode}|${a.assessmentName}')
+        .toList();
     _saveSortPreferences();
     notifyListeners();
   }
 
-  void reorderAssessments(int oldIndex, int newIndex, List<AssessmentModel> displayedList) {
+  void reorderAssessments(
+    int oldIndex,
+    int newIndex,
+    List<AssessmentModel> displayedList,
+  ) {
     if (oldIndex < newIndex) {
       newIndex -= 1;
     }
     final item = displayedList[oldIndex];
     final key = '${item.courseCode}|${item.assessmentName}';
-    
+
     // The displayed list without the moved item
-    final remainingDisplayed = List<AssessmentModel>.from(displayedList)..removeAt(oldIndex);
-    
+    final remainingDisplayed = List<AssessmentModel>.from(displayedList)
+      ..removeAt(oldIndex);
+
     // Remove the item from the custom order list
     _customAssessmentOrder.remove(key);
-    
+
     if (newIndex < remainingDisplayed.length) {
       // Find the item that will immediately follow our moved item
       final targetItem = remainingDisplayed[newIndex];
       final targetKey = '${targetItem.courseCode}|${targetItem.assessmentName}';
-      
+
       final targetIdx = _customAssessmentOrder.indexOf(targetKey);
       if (targetIdx != -1) {
         _customAssessmentOrder.insert(targetIdx, key);
@@ -304,7 +327,7 @@ class AssessmentProvider extends ChangeNotifier {
         _customAssessmentOrder.add(key);
       }
     }
-    
+
     _saveSortPreferences();
     notifyListeners();
   }
@@ -323,7 +346,9 @@ class AssessmentProvider extends ChangeNotifier {
           name: name,
           colorHex: colorHex,
         );
-        _folders[idx] = AssessmentFolderModel.fromJson(Map<String, dynamic>.from(updatedData));
+        _folders[idx] = AssessmentFolderModel.fromJson(
+          Map<String, dynamic>.from(updatedData),
+        );
         notifyListeners();
       } catch (e) {
         // Handle error
@@ -332,13 +357,18 @@ class AssessmentProvider extends ChangeNotifier {
   }
 
   /// Create a new custom folder.
-  Future<AssessmentFolderModel> createFolder(String name, String colorHex) async {
+  Future<AssessmentFolderModel> createFolder(
+    String name,
+    String colorHex,
+  ) async {
     try {
       final folderData = await _assessmentService.createAssessmentFolder(
         name: name,
         colorHex: colorHex,
       );
-      final folder = AssessmentFolderModel.fromJson(Map<String, dynamic>.from(folderData));
+      final folder = AssessmentFolderModel.fromJson(
+        Map<String, dynamic>.from(folderData),
+      );
       _folders.add(folder);
       notifyListeners();
       return folder;
@@ -364,7 +394,9 @@ class AssessmentProvider extends ChangeNotifier {
     _folders = List.from(newOrder);
     notifyListeners();
     try {
-      await _assessmentService.reorderAssessmentFolders(_folders.map((e) => e.id).toList());
+      await _assessmentService.reorderAssessmentFolders(
+        _folders.map((e) => e.id).toList(),
+      );
     } catch (e) {
       // Handle error
     }
@@ -387,15 +419,17 @@ class AssessmentProvider extends ChangeNotifier {
       // Add to the target folder
       final target = _folders.firstWhere((f) => f.id == folderId);
       final updatedKeys = List<String>.from(target.assessmentKeys)..add(key);
-      
+
       final updatedData = await _assessmentService.updateAssessmentFolder(
         id: folderId,
         assessmentKeys: updatedKeys,
       );
-      
+
       final idx = _folders.indexWhere((f) => f.id == folderId);
       if (idx != -1) {
-        _folders[idx] = AssessmentFolderModel.fromJson(Map<String, dynamic>.from(updatedData));
+        _folders[idx] = AssessmentFolderModel.fromJson(
+          Map<String, dynamic>.from(updatedData),
+        );
         notifyListeners();
       }
     } catch (e) {
@@ -412,12 +446,15 @@ class AssessmentProvider extends ChangeNotifier {
     for (int i = 0; i < _folders.length; i++) {
       if (_folders[i].assessmentKeys.contains(key)) {
         try {
-          final updatedKeys = List<String>.from(_folders[i].assessmentKeys)..remove(key);
+          final updatedKeys = List<String>.from(_folders[i].assessmentKeys)
+            ..remove(key);
           final updatedData = await _assessmentService.updateAssessmentFolder(
             id: _folders[i].id,
             assessmentKeys: updatedKeys,
           );
-          _folders[i] = AssessmentFolderModel.fromJson(Map<String, dynamic>.from(updatedData));
+          _folders[i] = AssessmentFolderModel.fromJson(
+            Map<String, dynamic>.from(updatedData),
+          );
           notifyListeners();
         } catch (e) {
           // Handle error

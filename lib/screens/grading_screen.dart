@@ -196,9 +196,10 @@ class _GradingScreenState extends State<GradingScreen>
 
     final courses = courseProvider.courses;
     final assessments = assessmentProvider.assessments;
-    final subscribers =
-        List.from(courseProvider.courseSubscribers[_selectedCourseCode] ?? []);
-    
+    final subscribers = List.from(
+      courseProvider.courseSubscribers[_selectedCourseCode] ?? [],
+    );
+
     subscribers.sort((a, b) {
       final aName = a.userName.toLowerCase();
       final bName = b.userName.toLowerCase();
@@ -316,7 +317,7 @@ class _ManageColumnsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final provider = context.watch<AssessmentProvider>();
     final assessments = provider.assessments;
-    
+
     return SafeArea(
       child: Container(
         constraints: BoxConstraints(
@@ -362,24 +363,23 @@ class _ManageColumnsSheet extends StatelessWidget {
             Expanded(
               child: ReorderableListView(
                 buildDefaultDragHandles: false,
-                proxyDecorator: (Widget child, int index, Animation<double> animation) {
-                  return Material(
-                    color: Colors.transparent,
-                    elevation: 0,
-                    child: child,
-                  );
-                },
+                proxyDecorator:
+                    (Widget child, int index, Animation<double> animation) {
+                      return Material(
+                        color: Colors.transparent,
+                        elevation: 0,
+                        child: child,
+                      );
+                    },
                 onReorder: (oldIndex, newIndex) {
-                  provider.reorderAssessments(
-                    oldIndex,
-                    newIndex,
-                    assessments,
-                  );
+                  provider.reorderAssessments(oldIndex, newIndex, assessments);
                 },
                 children: [
                   for (int i = 0; i < assessments.length; i++)
                     ReorderableDelayedDragStartListener(
-                      key: ValueKey('${assessments[i].courseCode}|${assessments[i].assessmentName}'),
+                      key: ValueKey(
+                        '${assessments[i].courseCode}|${assessments[i].assessmentName}',
+                      ),
                       index: i,
                       child: Container(
                         margin: const EdgeInsets.only(bottom: 8),
@@ -393,12 +393,16 @@ class _ManageColumnsSheet extends StatelessWidget {
                             width: 32,
                             height: 32,
                             decoration: BoxDecoration(
-                              color: assessmentColorFromHex(assessments[i].color).withOpacity(0.12),
+                              color: assessmentColorFromHex(
+                                assessments[i].color,
+                              ).withOpacity(0.12),
                               shape: BoxShape.circle,
                             ),
                             child: Icon(
                               assessmentIconFromKey(assessments[i].icon),
-                              color: assessmentColorFromHex(assessments[i].color),
+                              color: assessmentColorFromHex(
+                                assessments[i].color,
+                              ),
                               size: 16,
                             ),
                           ),
@@ -478,7 +482,10 @@ class _GradingHeader extends StatelessWidget {
             GestureDetector(
               onTap: onManageTap,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 6,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(20),
@@ -486,7 +493,11 @@ class _GradingHeader extends StatelessWidget {
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.view_column_rounded, color: Colors.white, size: 16),
+                    Icon(
+                      Icons.view_column_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                     SizedBox(width: 4),
                     Text(
                       'Columns',
@@ -758,7 +769,8 @@ class _GradingTable extends StatelessWidget {
                                   backgroundColor: Colors.transparent,
                                   builder: (ctx) => AssessmentDetailsModal(
                                     assessment: assessment,
-                                    canManage: false, // Don't allow delete/move from grading screen
+                                    canManage:
+                                        false, // Don't allow delete/move from grading screen
                                   ),
                                 );
                               },
@@ -929,50 +941,50 @@ class _HeaderCell extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-      width: width,
-      height: double.infinity,
-      padding: EdgeInsets.symmetric(
-        horizontal: isNumberCol ? 4 : 10,
-        vertical: 8,
-      ),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [
-            AppColors.secondary.withOpacity(0.12),
-            AppColors.primary.withOpacity(0.06),
-          ],
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
+        width: width,
+        height: double.infinity,
+        padding: EdgeInsets.symmetric(
+          horizontal: isNumberCol ? 4 : 10,
+          vertical: 8,
         ),
-        border: Border(
-          right: BorderSide(color: const Color(0xFFD5DDD8), width: 0.5),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              AppColors.secondary.withOpacity(0.12),
+              AppColors.primary.withOpacity(0.06),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+          border: Border(
+            right: BorderSide(color: const Color(0xFFD5DDD8), width: 0.5),
+          ),
         ),
-      ),
-      child: Center(
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Flexible(
-              child: Text(
-                text,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  color: const Color(0xFF1B3B22),
-                  fontSize: isNumberCol ? 12 : 13,
-                  fontWeight: FontWeight.w800,
-                  height: 1.2,
+        child: Center(
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Flexible(
+                child: Text(
+                  text,
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: const Color(0xFF1B3B22),
+                    fontSize: isNumberCol ? 12 : 13,
+                    fontWeight: FontWeight.w800,
+                    height: 1.2,
+                  ),
                 ),
               ),
-            ),
-            if (sortIcon != null) ...[
-              const SizedBox(width: 4),
-              Icon(sortIcon, size: 14, color: const Color(0xFF1B3B22)),
+              if (sortIcon != null) ...[
+                const SizedBox(width: 4),
+                Icon(sortIcon, size: 14, color: const Color(0xFF1B3B22)),
+              ],
             ],
-          ],
+          ),
         ),
-      ),
       ),
     );
   }

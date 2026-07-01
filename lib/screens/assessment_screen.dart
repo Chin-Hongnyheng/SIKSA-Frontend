@@ -571,7 +571,9 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                         await assessmentProvider.deleteFolder(folderId);
                         setState(() {
                           if (_isCustomizingAssessments) {
-                            _editableFolders.removeWhere((f) => f.id == folderId);
+                            _editableFolders.removeWhere(
+                              (f) => f.id == folderId,
+                            );
                           }
                           if (_activeFilter == folderId) {
                             _activeFilter = 'all';
