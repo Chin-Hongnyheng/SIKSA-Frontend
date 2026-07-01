@@ -8,8 +8,8 @@ class UserModel {
   final String? gender;
   final String? address;
   final String? photoUrl;
-  final String notification;
-  final String language;
+  // final String notification;
+  // final String language;
 
   UserModel({
     required this.id,
@@ -21,8 +21,8 @@ class UserModel {
     this.gender,
     this.address,
     this.photoUrl,
-    required this.notification,
-    required this.language,
+    // required this.notification,
+    // required this.language,
   });
 
   factory UserModel.fromMap(Map<String, dynamic> map) {
@@ -32,16 +32,14 @@ class UserModel {
       email: map['email']?.toString() ?? '',
       phone: map['phone'] is int
           ? map['phone']
-          : int.tryParse(
-              map['phone']?.toString() ?? '',
-            ), // 👈 handle int safely
+          : int.tryParse(map['phone']?.toString() ?? ''),
       role: map['role']?.toString() ?? '',
       dob: map['dob']?.toString(),
       gender: map['gender']?.toString(),
       address: map['address']?.toString(),
       photoUrl: map['photo_url']?.toString(),
-      notification: map['notification']?.toString() ?? 'ON',
-      language: map['language']?.toString() ?? 'ENGLISH',
+      // notification: map['notification']?.toString() ?? 'ON',
+      // language: map['language']?.toString() ?? 'ENGLISH',
     );
   }
 
@@ -56,8 +54,8 @@ class UserModel {
       'gender': gender,
       'address': address,
       'photo_url': photoUrl,
-      'notification': notification,
-      'language': language,
+      // 'notification': notification,
+      // 'language': language,
     };
   }
 }

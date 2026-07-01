@@ -33,47 +33,63 @@ class ScheduleHeader extends StatelessWidget {
       ),
       child: Container(
         width: double.infinity,
-        color: Colors.transparent, // ← transparent, background shows through
+        color: Colors.transparent,
         padding: EdgeInsets.only(
           top: topPadding + 8,
           bottom: 12,
           left: 4,
           right: 4,
         ),
-        child: Row(
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            // Back
-            IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white, size: 30),
-              onPressed: onBack,
-            ),
-
-            // Title
-            const Expanded(
-              child: Center(
-                child: Text(
-                  'Schedule',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 28,
-                  ),
+            // Title — perfectly centered relative to full width
+            const Center(
+              child: Text(
+                'Schedule',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 28,
                 ),
               ),
             ),
 
-            // Refresh
-            IconButton(
-              icon: const Icon(Icons.refresh, color: Colors.white, size: 30),
-              onPressed: onRefresh,
-              tooltip: 'Refresh',
+            // Left: back button
+            Align(
+              alignment: Alignment.centerLeft,
+              child: IconButton(
+                icon: const Icon(
+                  Icons.arrow_back,
+                  color: Colors.white,
+                  size: 30,
+                ),
+                onPressed: onBack,
+              ),
             ),
 
-            // View-mode picker
-            _ViewModeDropdown(
-              viewMode: viewMode,
-              onViewModeChanged: onViewModeChanged,
-              onCalendarTap: onCalendarTap,
+            // Right: refresh + view-mode dropdown
+            Align(
+              alignment: Alignment.centerRight,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(
+                      Icons.refresh,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: onRefresh,
+                    tooltip: 'Refresh',
+                  ),
+                  _ViewModeDropdown(
+                    viewMode: viewMode,
+                    onViewModeChanged: onViewModeChanged,
+                    onCalendarTap: onCalendarTap,
+                  ),
+                ],
+              ),
             ),
           ],
         ),

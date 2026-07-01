@@ -8,16 +8,17 @@ import '../core/theme/app_colors.dart';
 import '../widgets/checkbox.dart';
 import '../widgets/button.dart';
 import '../modals/email_modal.dart';
-import '../modals/OTP_modal.dart';
+import '../modals/otp_modal.dart';
 import '../modals/password_modal.dart';
 import '../service/authentication_service.dart';
-import '../service/OTP_service.dart';
+import '../service/otp_service.dart';
 import 'package:go_router/go_router.dart';
 import '../widgets/loading.dart';
 import '../widgets/center_toast.dart';
-import '../widgets/roles.dart';
 import '../providers/user_provider.dart';
 import 'package:provider/provider.dart';
+import 'package:google_sign_in/google_sign_in.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class AuthenticationScreen extends StatefulWidget {
   const AuthenticationScreen({super.key});
@@ -40,7 +41,77 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
   final GraphQLService graphqlService = GraphQLService();
 
-  String selectedRole = "Student";
+  String selectedRole = "User";
+  bool _termsAccepted = false;
+
+  Future<void> handleGoogleSignIn() async {
+    try {
+      LoadingOverlay.show(context);
+
+      // ✅ Sign out first then authenticate — skips attemptLightweightAuthentication
+      await GoogleSignIn.instance.signOut();
+      final GoogleSignInAccount? googleUser = await GoogleSignIn.instance
+          .authenticate();
+
+      if (googleUser == null) {
+        print('ℹ️ User cancelled Google Sign-In — no action needed');
+        return;
+      }
+
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
+
+      if (googleAuth.idToken == null) {
+        throw "Google Sign-In failed: No ID token received";
+      }
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
+
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      final String? firebaseIdToken = await FirebaseAuth.instance.currentUser
+          ?.getIdToken(true);
+
+      if (firebaseIdToken == null) throw "Failed to get Firebase token";
+
+      await graphqlService.googleAuth(
+        idToken: firebaseIdToken,
+        role: isSignUp ? selectedRole : "User",
+      );
+
+      if (!context.mounted) return;
+      await context.read<UserProvider>().loadUser();
+
+      await CenterToast.show(
+        context,
+        message: isSignUp ? "Registered with Google!" : "Login successful",
+        icon: Icons.check_circle,
+        color: Colors.green,
+      );
+
+      context.go('/dashboard');
+    } catch (e, stackTrace) {
+      if (e is GoogleSignInException &&
+          e.code == GoogleSignInExceptionCode.canceled) {
+        print('ℹ️ User cancelled Google Sign-In — no action needed');
+        return;
+      }
+
+      print('❌ Google Sign-In error: $e');
+      print('📋 StackTrace: $stackTrace');
+
+      await CenterToast.show(
+        context,
+        message: e.toString(),
+        icon: Icons.error,
+        color: Colors.red,
+      );
+    } finally {
+      LoadingOverlay.hide();
+    }
+  }
 
   Future<void> handleLogin() async {
     final email = emailController.text.trim();
@@ -59,30 +130,25 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
     try {
       LoadingOverlay.show(context);
       await graphqlService.login(email: email, password: password);
-      if (!context.mounted) return;
+      LoadingOverlay.hide();
 
-      final userProvider = context.read<UserProvider>();
-      await userProvider.loadUser();
+      if (!context.mounted) return;
+      await context.read<UserProvider>().loadUser();
       await CenterToast.show(
         context,
         message: "Login successful",
         icon: Icons.check_circle,
         color: Colors.green,
       );
-
-      final role = userProvider.user?.role.trim().toLowerCase();
-      context.go(
-        role == 'student' ? '/student-dashboard' : '/teacher-dashboard',
-      );
+      context.go('/dashboard');
     } catch (e) {
+      LoadingOverlay.hide();
       await CenterToast.show(
         context,
         message: e.toString(),
         icon: Icons.error,
         color: Colors.red,
       );
-    } finally {
-      LoadingOverlay.hide();
     }
   }
 
@@ -310,7 +376,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
           color: Colors.green,
         );
 
-        context.go('/profile');
+        context.go('/dashboard');
       }
     } catch (e) {
       await CenterToast.show(
@@ -378,7 +444,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                           onTap: () {
                             setState(() {
                               isSignUp = true;
-
+                              _termsAccepted = false;
                               usernameController.clear();
                               emailController.clear();
                               phoneController.clear();
@@ -452,16 +518,6 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
                       if (isSignUp) ...[
-                        RoleSelector(
-                          selectedRole: selectedRole,
-                          onChanged: (userRole) {
-                            setState(() {
-                              selectedRole = userRole;
-                            });
-                          },
-                        ),
-                        const SizedBox(height: 16),
-
                         AppTextField(
                           controller: usernameController,
                           label: "Username",
@@ -505,9 +561,15 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
                         AppCheckbox(
                           text: "I have accepted the terms and conditions",
+                          onChanged: (val) {
+                            setState(() => _termsAccepted = val);
+                          },
                         ),
                         const SizedBox(height: 16),
-                        AppButton(text: "SIGN UP", onPressed: handleRegister),
+                        AppButton(
+                          text: "SIGN UP",
+                          onPressed: _termsAccepted ? handleRegister : null,
+                        ),
 
                         const SizedBox(height: 24),
 
@@ -554,7 +616,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {},
+                            onTap: handleGoogleSignIn,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [
@@ -653,7 +715,7 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
                           ),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(14),
-                            onTap: () {},
+                            onTap: handleGoogleSignIn,
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.center,
                               children: [

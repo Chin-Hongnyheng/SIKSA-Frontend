@@ -1,10 +1,10 @@
 class AttendanceRecordModel {
   final String id;
   final String studentId;
-  final String courseId;
-  final String sessionId;
-  final String date;
-  final String status;
+  final String? courseCode; // was courseId, nullable from backend
+  final String? sessionId; // nullable
+  final String? date; // nullable
+  final String? status; // nullable
   final String? checkIn;
   final String? checkOut;
   final String? type;
@@ -13,10 +13,10 @@ class AttendanceRecordModel {
   AttendanceRecordModel({
     required this.id,
     required this.studentId,
-    required this.courseId,
-    required this.sessionId,
-    required this.date,
-    required this.status,
+    this.courseCode,
+    this.sessionId,
+    this.date,
+    this.status,
     this.checkIn,
     this.checkOut,
     this.type,
@@ -27,10 +27,10 @@ class AttendanceRecordModel {
     return AttendanceRecordModel(
       id: json['id']?.toString() ?? '',
       studentId: json['studentId']?.toString() ?? '',
-      courseId: json['courseId']?.toString() ?? '',
-      sessionId: json['sessionId']?.toString() ?? '',
-      date: json['date']?.toString() ?? '',
-      status: json['status']?.toString() ?? '',
+      courseCode: json['courseCode']?.toString(),
+      sessionId: json['sessionId']?.toString(),
+      date: json['date']?.toString(),
+      status: json['status']?.toString(),
       checkIn: json['checkIn']?.toString(),
       checkOut: json['checkOut']?.toString(),
       type: json['type']?.toString(),
@@ -42,7 +42,7 @@ class AttendanceRecordModel {
     return {
       'id': id,
       'studentId': studentId,
-      'courseId': courseId,
+      'courseCode': courseCode,
       'sessionId': sessionId,
       'date': date,
       'status': status,

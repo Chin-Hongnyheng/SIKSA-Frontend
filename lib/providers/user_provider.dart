@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import '../models/user_model.dart';
 import '../service/authentication_service.dart';
@@ -39,11 +41,12 @@ class UserProvider extends ChangeNotifier {
     try {
       await _graphqlService.update(
         userName: _user?.userName ?? '',
+        phone: _user?.phone?.toString() ?? '0',
         dob: (_user?.dob != null && _user!.dob!.isNotEmpty) ? _user!.dob : null,
         gender: _user?.gender ?? '',
         address: _user?.address ?? '',
-        notification: _user?.notification ?? 'ON',
-        language: _user?.language ?? 'ENGLISH',
+        // notification: _user?.notification ?? 'ON',
+        // language: _user?.language ?? 'ENGLISH',
       );
       // Reload from server to sync
       await loadUser();
@@ -59,5 +62,24 @@ class UserProvider extends ChangeNotifier {
   void clearUser() {
     _user = null;
     notifyListeners();
+  }
+
+  Future<void> uploadPhoto(File imageFile) async {
+    if (_user == null) return;
+    isLoading = true;
+    notifyListeners();
+    try {
+      final photoUrl = await _graphqlService.uploadPhoto(
+        userId: _user!.id,
+        imageFile: imageFile,
+      );
+      _user = UserModel.fromMap({..._user!.toMap(), 'photo_url': photoUrl});
+    } catch (e) {
+      error = e.toString();
+      rethrow;
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
   }
 }

@@ -483,7 +483,7 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     final user = context.watch<UserProvider>().user;
     final assessments = assessmentProvider.allAssessments;
     final role = user?.role ?? 'Unknown';
-    final canManage = role == 'Teacher' || role == 'Admin';
+    final canManage = role == 'User' || role == 'Admin';
 
     final filteredAssessments = _filterAssessments(
       assessments,

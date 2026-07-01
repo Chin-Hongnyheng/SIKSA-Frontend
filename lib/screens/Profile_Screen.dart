@@ -10,12 +10,14 @@ import '../providers/auth_provider.dart';
 import '../widgets/profile_header.dart';
 import '../widgets/profile_detail_card.dart';
 import '../widgets/profile_more_card.dart';
+import '../widgets/floating_line_background.dart';
 import '../modals/text_input_modal.dart';
 import '../modals/gender_modal.dart';
 import '../modals/date_picker_modal.dart';
 import '../modals/notification_modal.dart';
 import '../modals/language_modal.dart';
 import '../widgets/center_toast.dart';
+import '../modals/phone_edit_modal.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -27,6 +29,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   File? _selectedImage;
   final ImagePicker _picker = ImagePicker();
+  static const double avatarRadius = 70.0;
 
   void _onLogoutTap() {
     final overlayState = Overlay.of(context, rootOverlay: true);
@@ -144,6 +147,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
     if (image != null) {
       setState(() => _selectedImage = File(image.path));
+      try {
+        await context.read<UserProvider>().uploadPhoto(File(image.path));
+        if (mounted) {
+          CenterToast.show(
+            context,
+            message: 'Photo updated!',
+            icon: Icons.check_circle,
+            color: Colors.green,
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          CenterToast.show(
+            context,
+            message: e.toString(),
+            icon: Icons.error_outline,
+            color: Colors.red,
+          );
+        }
+      }
     }
   }
 
@@ -183,6 +206,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
         user: user,
         onSave: _updateField,
       );
+    } else if (fieldKey == 'phone') {
+      showPhoneEditModal(
+        context,
+        currentValue: user?['phone']?.toString(),
+        onSave: (value) => _updateField('phone', value),
+      );
     } else {
       showTextInputModal(
         context,
@@ -216,16 +245,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget build(BuildContext context) {
     final provider = context.watch<UserProvider>();
     final user = provider.userMap;
+    final topPadding = MediaQuery.of(context).padding.top;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFFAFAFA),
-      body: provider.isLoading
-          ? const Center(
-              child: CircularProgressIndicator(color: Color(0xFF2E7D32)),
-            )
-          : provider.error != null && user == null
-          ? _buildError(provider)
-          : _buildBody(user),
+      backgroundColor: Colors.transparent,
+      body: Stack(
+        children: [
+          // ── Animated green background (covers whole page) ──────────
+          const Positioned.fill(
+            child: FloatingLinesBackground(
+              colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
+              lineCount: 6,
+              animationSpeed: 0.5,
+            ),
+          ),
+
+          // ── White body panel ─────────────────────────────────────────
+          Positioned(
+            top: topPadding + 70,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.white),
+              child: provider.isLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF2E7D32),
+                      ),
+                    )
+                  : provider.error != null && user == null
+                  ? _buildError(provider)
+                  : _buildBody(user),
+            ),
+          ),
+
+          // ── Top header (floats over the background) ─────────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: ProfileHeader(
+              onRefresh: () => context.read<UserProvider>().loadUser(),
+              onSettings: () {},
+              onBack: () => Navigator.pop(context),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -260,62 +327,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildBody(Map<String, dynamic>? user) {
-    return Column(
-      children: [
-        ProfileHeader(
-          user: user,
-          selectedImage: _selectedImage,
-          onPickImage: _pickImage,
-          onRefresh: () =>
-              context.read<UserProvider>().loadUser(), // 👈 use provider
-          onSettings: () {},
-          onBack: () => Navigator.pop(context),
-        ),
-        Transform.translate(
-          offset: const Offset(0, -ProfileHeader.avatarRadius),
-          child: Column(
+    final photoUrl = user?['photo_url'] as String?;
+
+    return SingleChildScrollView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      child: Column(
+        children: [
+          // ── Avatar + name, sitting inside the white panel, not overlapping ──
+          const SizedBox(height: 24),
+          Stack(
             children: [
-              Text(
-                user?['userName'] ?? 'User',
-                style: const TextStyle(
-                  color: Color(0xFF1B5E20),
-                  fontSize: 34,
-                  fontWeight: FontWeight(900),
+              Container(
+                width: avatarRadius * 2,
+                height: avatarRadius * 2,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: const Color(0xFF2E7D32), width: 3),
+                  color: const Color(0xFF2E7D32),
+                ),
+                child: ClipOval(
+                  child: _selectedImage != null
+                      ? Image.file(_selectedImage!, fit: BoxFit.cover)
+                      : (photoUrl != null && photoUrl.isNotEmpty)
+                      ? Image.network(
+                          photoUrl,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => Icon(
+                            Icons.person,
+                            size: avatarRadius * 1.2,
+                            color: Colors.white,
+                          ),
+                        )
+                      : Icon(
+                          Icons.person,
+                          size: avatarRadius * 1.2,
+                          color: Colors.white,
+                        ),
                 ),
               ),
-              Text(
-                user?['role'] ?? 'Student',
-                style: const TextStyle(
-                  color: Color.fromARGB(255, 53, 53, 53),
-                  fontSize: 20,
+              Positioned(
+                bottom: 6,
+                right: 6,
+                child: GestureDetector(
+                  onTap: _pickImage,
+                  child: Container(
+                    width: 30,
+                    height: 30,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF2E7D32),
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.edit,
+                      color: Colors.white,
+                      size: 15,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 16),
             ],
           ),
-        ),
-        Expanded(
-          child: Transform.translate(
-            offset: const Offset(0, -ProfileHeader.avatarRadius),
-            child: SingleChildScrollView(
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                children: [
-                  ProfileDetailCard(user: user, onFieldTap: _onFieldTap),
-                  const SizedBox(height: 20),
-                  ProfileMoreCard(
-                    user: user,
-                    onLogout: _onLogoutTap,
-                    onNotificationTap: _onNotificationTap,
-                    onLanguageTap: _onLanguageTap,
-                  ),
-                  const SizedBox(height: 40),
-                ],
-              ),
+          const SizedBox(height: 12),
+          Text(
+            user?['userName'] ?? 'User',
+            style: const TextStyle(
+              color: Color(0xFF1B5E20),
+              fontSize: 28,
+              fontWeight: FontWeight.w900,
             ),
           ),
-        ),
-      ],
+          const SizedBox(height: 20),
+          ProfileDetailCard(user: user, onFieldTap: _onFieldTap),
+          const SizedBox(height: 20),
+          ProfileMoreCard(user: user, onLogout: _onLogoutTap),
+          const SizedBox(height: 40),
+        ],
+      ),
     );
   }
 }

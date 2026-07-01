@@ -79,9 +79,8 @@ class TodaySchedule extends StatelessWidget {
 
   Color _getTaskColor(ScheduleModel task) {
     try {
-      if (task.color == null || task.color!.isEmpty)
-        return const Color(0xFF1E6B2D);
-      final hex = task.color!.replaceAll('#', '');
+      if (task.color.isEmpty) return const Color(0xFF1E6B2D);
+      final hex = task.color.replaceAll('#', '');
       final rrggbb = hex.length > 6 ? hex.substring(hex.length - 6) : hex;
       return Color(int.parse('FF$rrggbb', radix: 16));
     } catch (_) {
@@ -93,7 +92,11 @@ class TodaySchedule extends StatelessWidget {
   Widget build(BuildContext context) {
     final today = DateTime.now();
     final schedules = context.watch<ScheduleProvider>().schedules;
-    final courses = context.watch<CourseProvider>().courses;
+    // Use allCourses (teaching + enrolled + discoverable), not the
+    // teaching-only `courses` list — otherwise any schedule belonging to
+    // a course you're enrolled in (but didn't create) can't be matched
+    // and falls back to "Unknown".
+    final courses = context.watch<CourseProvider>().allCourses;
 
     final todaySchedules =
         schedules.where((s) => _shouldShowToday(s, today)).toList()
@@ -205,14 +208,27 @@ class TodaySchedule extends StatelessWidget {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                courseName,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
-                                  color: Color(0xFF212121),
-                                ),
-                                overflow: TextOverflow.ellipsis,
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      courseName,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFF212121),
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                  if (schedule.source != null) ...[
+                                    const SizedBox(width: 6),
+                                    _ScheduleSourceTag(
+                                      source: schedule.source!,
+                                    ),
+                                  ],
+                                ],
                               ),
                               const SizedBox(height: 2),
                               Text(
@@ -281,6 +297,45 @@ class TodaySchedule extends StatelessWidget {
           }),
         const SizedBox(height: 20),
       ],
+    );
+  }
+}
+
+// ── Teaching / Enrolled tag ───────────────────────────────────────────────────
+
+class _ScheduleSourceTag extends StatelessWidget {
+  final String source; // 'own' or 'enrolled'
+  const _ScheduleSourceTag({required this.source});
+
+  @override
+  Widget build(BuildContext context) {
+    final isOwn = source == 'own';
+    final bg = isOwn ? const Color(0xFFE6F4EA) : const Color(0xFFE3F0FB);
+    final fg = isOwn ? const Color(0xFF1E6B2D) : const Color(0xFF1565C0);
+    final icon = isOwn ? Icons.edit_note : Icons.school_outlined;
+    final label = isOwn ? 'Teaching' : 'Enrolled';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

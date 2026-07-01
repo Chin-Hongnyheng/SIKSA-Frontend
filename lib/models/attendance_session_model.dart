@@ -1,7 +1,7 @@
 class AttendanceSessionModel {
   final String id;
-  final String courseId;
-  final String teacherId;
+  final String courseCode; // was courseId
+  final String createdBy;
   final String title;
   final String date;
   final String startTime;
@@ -14,8 +14,8 @@ class AttendanceSessionModel {
 
   AttendanceSessionModel({
     required this.id,
-    required this.courseId,
-    required this.teacherId,
+    required this.courseCode,
+    required this.createdBy,
     required this.title,
     required this.date,
     required this.startTime,
@@ -30,8 +30,8 @@ class AttendanceSessionModel {
   factory AttendanceSessionModel.fromJson(Map<String, dynamic> json) {
     return AttendanceSessionModel(
       id: json['id']?.toString() ?? '',
-      courseId: json['courseId']?.toString() ?? '',
-      teacherId: json['teacherId']?.toString() ?? '',
+      courseCode: json['courseCode']?.toString() ?? '',
+      createdBy: json['createdBy']?.toString() ?? '',
       title: json['title']?.toString() ?? '',
       date: json['date']?.toString() ?? '',
       startTime: json['startTime']?.toString() ?? '',
@@ -40,11 +40,11 @@ class AttendanceSessionModel {
       passwordExpiresAt: json['passwordExpiresAt']?.toString() ?? '',
       passwordRefreshSeconds: json['passwordRefreshSeconds'] is int
           ? json['passwordRefreshSeconds']
-          : int.tryParse(json['passwordRefreshSeconds']?.toString() ?? '60') ??
-              60,
+          : int.tryParse(json['passwordRefreshSeconds']?.toString() ?? '') ??
+                60,
       lateAfterMinutes: json['lateAfterMinutes'] is int
           ? json['lateAfterMinutes']
-          : int.tryParse(json['lateAfterMinutes']?.toString() ?? '15') ?? 15,
+          : int.tryParse(json['lateAfterMinutes']?.toString() ?? '') ?? 15,
       isActive: json['isActive'] == true,
     );
   }
@@ -52,8 +52,8 @@ class AttendanceSessionModel {
   Map<String, dynamic> toJson() {
     return {
       'id': id,
-      'courseId': courseId,
-      'teacherId': teacherId,
+      'courseCode': courseCode,
+      'createdBy': createdBy,
       'title': title,
       'date': date,
       'startTime': startTime,

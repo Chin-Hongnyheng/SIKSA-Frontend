@@ -1,4 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
+import 'package:frontend/firebase_options.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:provider/provider.dart';
 import 'core/theme/app_theme.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -7,6 +10,7 @@ import 'providers/auth_provider.dart';
 import 'providers/course_provider.dart';
 import 'providers/assessment_provider.dart';
 import 'providers/schedule_provider.dart';
+import 'providers/setting_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/attendance_provider.dart';
 import 'providers/grade_provider.dart';
@@ -15,7 +19,8 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await AuthProvider.loadTokens();
-
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  await GoogleSignIn.instance.initialize();
   runApp(
     MultiProvider(
       providers: [
@@ -31,6 +36,8 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => UserProvider()..loadUser()),
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
         ChangeNotifierProvider(create: (_) => GradeProvider()),
+        ChangeNotifierProvider(create: (_) => SettingsProvider()),
+
       ],
       child: const MyApp(),
     ),

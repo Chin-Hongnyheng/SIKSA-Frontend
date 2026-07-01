@@ -27,6 +27,7 @@ class CourseModel {
   final int subscriberCount;
   final bool isSubscribed;
   final List<CourseSubscriberModel> subscribers;
+  final String? courseImg;
 
   CourseModel({
     required this.courseCode,
@@ -37,6 +38,7 @@ class CourseModel {
     this.subscriberCount = 0,
     this.isSubscribed = false,
     this.subscribers = const [],
+    this.courseImg,
   });
 
   factory CourseModel.fromMap(Map<String, dynamic> map) {
@@ -51,6 +53,7 @@ class CourseModel {
       subscriberCount:
           int.tryParse(map['subscriberCount']?.toString() ?? '') ?? 0,
       isSubscribed: map['isSubscribed'] == true,
+      courseImg: map['courseImg']?.toString(),
       subscribers: rawSubscribers is List
           ? rawSubscribers
                 .map(
@@ -72,6 +75,7 @@ class CourseModel {
     int? subscriberCount,
     bool? isSubscribed,
     List<CourseSubscriberModel>? subscribers,
+    String? courseImg,
   }) {
     return CourseModel(
       courseCode: courseCode ?? this.courseCode,
@@ -82,6 +86,7 @@ class CourseModel {
       subscriberCount: subscriberCount ?? this.subscriberCount,
       isSubscribed: isSubscribed ?? this.isSubscribed,
       subscribers: subscribers ?? this.subscribers,
+      courseImg: courseImg ?? this.courseImg,
     );
   }
 }

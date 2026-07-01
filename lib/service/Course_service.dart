@@ -1,5 +1,7 @@
 import 'dart:async';
-
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../core/utils/api_helper.dart';
@@ -43,6 +45,7 @@ class CourseService {
           createdAt
           subscriberCount
           isSubscribed
+          courseImg
           subscribers {
             id
             userName
@@ -74,6 +77,7 @@ class CourseService {
           createdAt
           subscriberCount
           isSubscribed
+          courseImg
           subscribers {
             id
             userName
@@ -105,6 +109,7 @@ class CourseService {
           createdAt
           subscriberCount
           isSubscribed
+          courseImg
           subscribers {
             id
             userName
@@ -289,5 +294,28 @@ class CourseService {
     }
 
     return result.data!['getCourseSubscribers'];
+  }
+
+  Future<String> uploadCourseImage({
+    required String courseCode,
+    required File imageFile,
+  }) async {
+    final uri = Uri.parse(
+      '${dotenv.env['BASE_URL']}/courses/$courseCode/image',
+    );
+
+    final request = http.MultipartRequest('PATCH', uri)
+      ..headers['Authorization'] = 'Bearer ${AuthProvider.accessToken}'
+      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    final json = jsonDecode(body);
+
+    if (response.statusCode != 200) {
+      throw Exception(json['message'] ?? 'Upload failed');
+    }
+
+    return json['course_img'];
   }
 }

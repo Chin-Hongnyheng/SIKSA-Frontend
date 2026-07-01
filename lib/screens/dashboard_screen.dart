@@ -6,20 +6,21 @@ import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
 import '../models/course_model.dart';
+import '../models/schedule_model.dart';
 import '../providers/user_provider.dart';
 import '../providers/course_provider.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/assessment_provider.dart';
+import '../providers/attendance_provider.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/quick_access.dart';
+import '../widgets/recommendation.dart';
 import '../widgets/scan_icon.dart';
 import '../widgets/today_schedule.dart';
 import '../widgets/floating_line_background.dart';
 
 class DashBoardScreen extends StatefulWidget {
-  final bool isStudentDashboard;
-
-  const DashBoardScreen({super.key, this.isStudentDashboard = false});
+  const DashBoardScreen({super.key});
 
   @override
   State<DashBoardScreen> createState() => _DashBoardScreenState();
@@ -29,27 +30,28 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(_loadDashboardCourses);
+    Future.microtask(_loadDashboardData);
   }
 
-  Future<void> _loadDashboardCourses() async {
+  Future<void> _loadDashboardData() async {
     final userProvider = context.read<UserProvider>();
-
     if (userProvider.user == null) {
       await userProvider.loadUser();
     }
-
     if (!mounted) return;
 
     final role = userProvider.user?.role;
     await Future.wait([
       context.read<CourseProvider>().loadCourses(role: role),
+      context.read<CourseProvider>().loadAllCourses(),
+      context.read<CourseProvider>().loadTeacherStudentCount(),
       context.read<AssessmentProvider>().loadAllAssessments(),
+      context.read<ScheduleProvider>().loadSchedules(),
     ]);
 
-    final normalizedRole = role?.trim().toLowerCase();
-    if (normalizedRole == 'teacher' || normalizedRole == 'admin') {
-      await context.read<CourseProvider>().loadTeacherStudentCount();
+    final userId = userProvider.user?.id;
+    if (userId != null && userId.isNotEmpty) {
+      await context.read<AttendanceProvider>().loadStudentSummary(userId);
     }
   }
 
@@ -60,55 +62,117 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
     return 'Good Evening';
   }
 
-  String _getUserRole(dynamic user) {
-    if (user == null) return '';
+  bool _matchesDate(ScheduleModel schedule, DateTime date) {
+    final recurrence = schedule.recurrenceType.toLowerCase().trim();
+    if (recurrence == 'none') {
+      if (schedule.date == null) return false;
+      final target = _parseDate(schedule.date!);
+      return target != null && _isSameDay(target, date);
+    }
+    final start = schedule.startDate != null
+        ? _parseDate(schedule.startDate!)
+        : null;
+    final end = schedule.endDate != null ? _parseDate(schedule.endDate!) : null;
+    if (start == null || end == null) return false;
+    final dateOnly = DateTime(date.year, date.month, date.day);
+    if (dateOnly.isBefore(start) || dateOnly.isAfter(end)) return false;
+    if (recurrence == 'daily') return true;
+    if (recurrence == 'weekly') {
+      if (schedule.selectedDays == null || schedule.selectedDays!.isEmpty)
+        return false;
+      final weekdayName = _weekdayName(date.weekday);
+      return schedule.selectedDays!
+          .map((d) => d.toLowerCase().trim())
+          .contains(weekdayName.toLowerCase());
+    }
+    if (recurrence == 'monthly') {
+      if (schedule.selectedDays == null || schedule.selectedDays!.isEmpty)
+        return false;
+      final selectedDayNumbers = schedule.selectedDays!
+          .map((d) => int.tryParse(d.trim().split(' ').first))
+          .whereType<int>()
+          .toList();
+      return selectedDayNumbers.contains(date.day);
+    }
+    return false;
+  }
 
+  DateTime? _parseDate(String dateStr) {
     try {
-      final value = user.role;
-      if (value != null) return value.toString().toLowerCase();
-    } catch (_) {}
+      final dt = DateTime.parse(dateStr).toUtc();
+      return DateTime(dt.year, dt.month, dt.day);
+    } catch (_) {
+      return null;
+    }
+  }
 
-    try {
-      final value = user.userType;
-      if (value != null) return value.toString().toLowerCase();
-    } catch (_) {}
+  bool _isSameDay(DateTime a, DateTime b) =>
+      a.year == b.year && a.month == b.month && a.day == b.day;
 
-    try {
-      final value = user.accountType;
-      if (value != null) return value.toString().toLowerCase();
-    } catch (_) {}
-
-    try {
-      final value = user.type;
-      if (value != null) return value.toString().toLowerCase();
-    } catch (_) {}
-
-    return '';
+  String _weekdayName(int weekday) {
+    const names = [
+      'Monday',
+      'Tuesday',
+      'Wednesday',
+      'Thursday',
+      'Friday',
+      'Saturday',
+      'Sunday',
+    ];
+    return names[weekday - 1];
   }
 
   @override
   Widget build(BuildContext context) {
     final user = context.watch<UserProvider>().user;
     final courseProvider = context.watch<CourseProvider>();
-    final courses = courseProvider.courses;
+    final allCourses = courseProvider.allCourses;
+    final currentUserName = user?.userName;
     final schedules = context.watch<ScheduleProvider>().schedules;
     final assessments = context.watch<AssessmentProvider>().allAssessments;
     final totalStudents = courseProvider.teacherStudentCount;
-    final myCourseCount = widget.isStudentDashboard
-        ? courses.where((course) => course.isSubscribed).length
-        : courses.length;
+
+    // ── Attendance ────────────────────────────────────────────────────────
+    final attendanceProvider = context.watch<AttendanceProvider>();
+    final summary = attendanceProvider.attendanceSummary;
+    final attendanceTotal = summary.values.fold(0, (s, v) => s + v);
+    final attendanceRate = attendanceProvider.attendanceRate;
+
+    // ── Courses ───────────────────────────────────────────────────────────
+    final createdCourses = allCourses
+        .where((c) => c.createdBy == currentUserName)
+        .toList();
+
+    final enrolledCourses = allCourses
+        .where((c) => c.isSubscribed && c.createdBy != currentUserName)
+        .toList();
+
+    final myCoursesCount = createdCourses.length + enrolledCourses.length;
+
+    // ── Today sessions ────────────────────────────────────────────────────
+    final teachingSchedules = schedules
+        .where((s) => s.source != 'enrolled')
+        .toList();
+    final todaySessionCount = teachingSchedules
+        .where((s) => _matchesDate(s, DateTime.now()))
+        .length;
 
     return Scaffold(
-      backgroundColor: AppColors.secondary,
+      backgroundColor: AppColors.primary,
       body: Stack(
         children: [
-          const FloatingLinesBackground(),
+          FloatingLinesBackground(
+            colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
+            lineCount: 6,
+            animationSpeed: 0.5,
+          ),
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Top bar ─────────────────────────────────────────────
                   Row(
                     mainAxisAlignment: MainAxisAlignment.end,
                     children: [
@@ -121,7 +185,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () {},
+                        onPressed: () => context.push('/courses/qr'),
                         icon: const Icon(
                           Icons.qr_code,
                           color: Colors.white,
@@ -133,6 +197,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
 
                   const SizedBox(height: 12),
 
+                  // ── User greeting ────────────────────────────────────────
                   Row(
                     children: [
                       GestureDetector(
@@ -162,9 +227,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                           ),
                         ),
                       ),
-
                       const SizedBox(width: 12),
-
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,33 +256,28 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
 
                   const SizedBox(height: 24),
 
+                  // ── Stat cards row 1 ─────────────────────────────────────
                   Row(
                     children: [
                       Expanded(
                         child: DashboardStatCard(
                           icon: Icons.menu_book_outlined,
                           title: 'My Courses',
-                          value: myCourseCount.toString(),
+                          value: myCoursesCount.toString(),
                           color: Colors.red,
-                          onTap: () {
-                            if (widget.isStudentDashboard) {
-                              context.push('/my-courses');
-                            } else {
-                              context.push('/courses');
-                            }
-                          },
+                          onTap: () => context.push('/courses'),
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: DashboardStatCard(
-                          icon: Icons.assignment_outlined,
-                          title: 'My Assessments',
-                          value: assessments.length.toString(),
+                          icon: Icons.check_circle_outline,
+                          title: 'My Attendance',
+                          value: attendanceTotal == 0
+                              ? '0%'
+                              : '$attendanceRate%',
                           color: Colors.yellow,
-                          onTap: () {
-                            context.push('/assessments');
-                          },
+                          onTap: () => context.push('/attendance/student'),
                         ),
                       ),
                     ],
@@ -227,6 +285,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
 
                   const SizedBox(height: 16),
 
+                  // ── Stat cards row 2 ─────────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -235,24 +294,17 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                           title: 'My Schedules',
                           value: schedules.length.toString(),
                           color: Colors.orange,
+                          onTap: () => context.push('/schedule'),
                         ),
                       ),
                       const SizedBox(width: 16),
                       Expanded(
                         child: DashboardStatCard(
-                          icon: widget.isStudentDashboard
-                              ? Icons.fact_check_outlined
-                              : Icons.school_outlined,
-                          title: widget.isStudentDashboard
-                              ? 'My Attendances'
-                              : 'Total Students',
-                          value: widget.isStudentDashboard
-                              ? '0'
-                              : totalStudents.toString(),
-                          color: Colors.blue,
-                          onTap: widget.isStudentDashboard
-                              ? null
-                              : () => _showSubscribedStudents(context, courses),
+                          icon: Icons.event,
+                          title: 'Today Sessions',
+                          value: todaySessionCount.toString(),
+                          color: Colors.purple,
+                          onTap: () => context.push('/attendance/home/list'),
                         ),
                       ),
                     ],
@@ -260,6 +312,7 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
 
                   const SizedBox(height: 24),
 
+                  // ── Quick access row ─────────────────────────────────────
                   Row(
                     children: [
                       Expanded(
@@ -269,20 +322,8 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                             color: AppColors.primary,
                             size: 36,
                           ),
-                          title: 'Course',
-                          onTap: () => context.push('/courses'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: QuickAccessCard(
-                          icon: Icon(
-                            Icons.article_outlined,
-                            color: AppColors.primary,
-                            size: 36,
-                          ),
-                          title: 'Assessments',
-                          onTap: () => context.push('/assessments'),
+                          title: 'Discover',
+                          onTap: () => context.push('/courses/discover'),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -294,71 +335,22 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                             size: 36,
                           ),
                           title: 'Attendance',
-                          onTap: () {
-                            final currentUser = context
-                                .read<UserProvider>()
-                                .user;
-                            final role = _getUserRole(currentUser);
-
-                            if (role == 'teacher' || role == 'instructor') {
-                              context.push('/attendance');
-                            } else if (role == 'student') {
-                              context.push('/attendance/student');
-                            } else {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(
-                                    'User role not found. Current role: ${role.isEmpty ? "empty" : role}',
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          },
+                          onTap: () => context.push('/attendance'),
                         ),
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 12),
-
-                  Row(
-                    children: [
+                      const SizedBox(width: 12),
                       Expanded(
                         child: QuickAccessCard(
                           icon: const ScanIcon(size: 36),
                           title: 'QR Scan',
-                          onTap: () {},
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: QuickAccessCard(
-                          icon: Icon(
-                            Icons.grade_outlined,
-                            color: AppColors.primary,
-                            size: 36,
-                          ),
-                          title: 'Grade',
-                          onTap: () => context.push('/grading'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: QuickAccessCard(
-                          icon: Icon(
-                            Icons.event_note_outlined,
-                            color: AppColors.primary,
-                            size: 36,
-                          ),
-                          title: 'Schedule',
-                          onTap: () => context.push('/schedule'),
+                          onTap: () => context.push('/qr_scan'),
                         ),
                       ),
                     ],
                   ),
 
                   const SizedBox(height: 16),
+                  const RecommendationWidget(),
                   const TodaySchedule(),
                 ],
               ),
@@ -371,16 +363,20 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
 
   void _showSubscribedStudents(
     BuildContext context,
-    List<CourseModel> courses,
+    List<CourseModel> createdCourses,
   ) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _SubscribedStudentsSheet(courses: courses),
+      builder: (context) => _SubscribedStudentsSheet(courses: createdCourses),
     );
   }
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Subscribed Students Sheet
+// ─────────────────────────────────────────────────────────────────────────────
 
 class _SubscribedStudentsSheet extends StatelessWidget {
   const _SubscribedStudentsSheet({required this.courses});
@@ -390,7 +386,7 @@ class _SubscribedStudentsSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final coursesWithStudents = courses
-        .where((course) => course.subscribers.isNotEmpty)
+        .where((c) => c.subscribers.isNotEmpty)
         .toList();
 
     return SafeArea(
@@ -496,43 +492,41 @@ class _CourseStudentsBlock extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 10),
-          ...course.subscribers
-              .map(
-                (student) => Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.person_outline_rounded,
-                        color: AppColors.primary,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          student.userName,
-                          style: const TextStyle(
-                            color: Color(0xFF2D3748),
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ),
-                      Flexible(
-                        child: Text(
-                          student.email,
-                          textAlign: TextAlign.right,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF718096),
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ],
+          ...course.subscribers.map(
+            (student) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.person_outline_rounded,
+                    color: AppColors.primary,
+                    size: 18,
                   ),
-                ),
-              )
-              .toList(),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      student.userName,
+                      style: const TextStyle(
+                        color: Color(0xFF2D3748),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  Flexible(
+                    child: Text(
+                      student.email,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF718096),
+                        fontSize: 12,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );

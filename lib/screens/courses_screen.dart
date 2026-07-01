@@ -14,57 +14,73 @@ import '../models/schedule_model.dart';
 import '../providers/course_provider.dart';
 import '../providers/user_provider.dart';
 import '../widgets/center_toast.dart';
+import '../widgets/floating_line_background.dart';
+import '../widgets/selected_card.dart';
+
+const int _kTeachingTab = 0;
+const int _kEnrolledTab = 1;
+
+/// Controls which set of tabs/content the CoursesScreen shows.
+enum CourseScreenMode {
+  /// Shows "Teaching" + "Enrolled" tabs only.
+  my,
+
+  /// Shows the "Discover" list only, no tab bar.
+  discover,
+}
 
 class CoursesScreen extends StatefulWidget {
   const CoursesScreen({
     super.key,
-    this.onlySubscribed = false,
     this.showSearch = true,
-  });
+    CourseScreenMode? mode,
+  }) : mode = mode ?? CourseScreenMode.my;
 
-  final bool onlySubscribed;
   final bool showSearch;
+  final CourseScreenMode mode;
 
   @override
   State<CoursesScreen> createState() => _CoursesScreenState();
 }
 
-class _CoursesScreenState extends State<CoursesScreen> {
+class _CoursesScreenState extends State<CoursesScreen>
+    with SingleTickerProviderStateMixin {
+  TabController? _tabController;
   final TextEditingController _searchController = TextEditingController();
   String _searchText = '';
+
+  bool get _isMyMode => widget.mode == CourseScreenMode.my;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(_loadCoursesForRole);
+    if (_isMyMode) {
+      _tabController = TabController(length: 2, vsync: this);
+    }
+    Future.microtask(_loadAll);
   }
 
   @override
   void dispose() {
+    _tabController?.dispose();
     _searchController.dispose();
     super.dispose();
   }
 
-  bool _canManage(String? role) {
-    final normalizedRole = role?.trim().toLowerCase();
-    return normalizedRole == 'teacher' || normalizedRole == 'admin';
-  }
+  String _readableError(String value) => value.replaceAll('Exception: ', '');
 
-  String _readableError(String value) {
-    return value.replaceAll('Exception: ', '');
-  }
-
-  Future<void> _loadCoursesForRole() async {
+  Future<void> _loadAll() async {
     final userProvider = context.read<UserProvider>();
-
-    if (userProvider.user == null) {
-      await userProvider.loadUser();
-    }
-
-    final role = userProvider.user?.role;
+    if (userProvider.user == null) await userProvider.loadUser();
     if (!mounted) return;
+    await context.read<CourseProvider>().loadCourses();
+    await context.read<CourseProvider>().loadAllCourses();
+  }
 
-    await context.read<CourseProvider>().loadCourses(role: role);
+  Future<void> _loadAllCourses() async {
+    if (!mounted) return;
+    await context.read<CourseProvider>().loadCourses();
+    await context.read<CourseProvider>().loadAllCourses();
   }
 
   void _openCreateModal() {
@@ -72,31 +88,25 @@ class _CoursesScreenState extends State<CoursesScreen> {
       context,
       onSubmit: (_) async {
         await context.read<ScheduleProvider>().loadSchedules();
-        final role = context.read<UserProvider>().user?.role;
-        await context.read<CourseProvider>().loadCourses(role: role);
+        await context.read<CourseProvider>().loadCourses();
+        await context.read<CourseProvider>().loadAllCourses();
       },
     );
   }
 
-  List<CourseModel> _filteredCourses(List<CourseModel> courses) {
+  List<CourseModel> _filtered(List<CourseModel> courses) {
     final query = _searchText.trim().toLowerCase();
     if (query.isEmpty) return courses;
-
-    return courses.where((course) {
-      return course.courseName.toLowerCase().contains(query) ||
-          course.courseCode.toLowerCase().contains(query) ||
-          (course.description ?? '').toLowerCase().contains(query);
+    return courses.where((c) {
+      return c.courseName.toLowerCase().contains(query) ||
+          c.courseCode.toLowerCase().contains(query) ||
+          (c.description ?? '').toLowerCase().contains(query);
     }).toList();
   }
 
-  /// Opens the schedule modal pre-filled with the course + its first schedule.
-  /// The modal handles calling both courseService and scheduleService internally.
-  /// onSubmit only needs to refresh the providers.
   Future<void> _openCourseEditor({required CourseModel course}) async {
-    final role = context.read<UserProvider>().user?.role;
     final scheduleProvider = context.read<ScheduleProvider>();
 
-    // Find the first schedule that belongs to this course (may be null).
     final ScheduleModel? existing = scheduleProvider.schedules
         .where((s) => s.courseCode == course.courseCode)
         .firstOrNull;
@@ -114,10 +124,10 @@ class _CoursesScreenState extends State<CoursesScreen> {
         'endTime': existing?.endTime ?? '',
       },
       onSubmit: (_) async {
-        // Modal already called the services — just refresh both providers.
         if (!mounted) return;
         await scheduleProvider.loadSchedules();
-        await context.read<CourseProvider>().loadCourses(role: role);
+        await context.read<CourseProvider>().loadCourses();
+        await context.read<CourseProvider>().loadAllCourses();
       },
     );
   }
@@ -126,12 +136,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
     final confirmed = await _showDeleteConfirmOverlay(course);
     if (!confirmed || !mounted) return;
 
-    final role = context.read<UserProvider>().user?.role;
-
     try {
       await context.read<CourseProvider>().deleteCourse(
         courseCode: course.courseCode,
-        role: role,
       );
       if (!mounted) return;
       await context.read<ScheduleProvider>().loadSchedules();
@@ -268,12 +275,9 @@ class _CoursesScreenState extends State<CoursesScreen> {
   }
 
   Future<void> _subscribeCourse(CourseModel course) async {
-    final role = context.read<UserProvider>().user?.role;
-
     try {
       await context.read<CourseProvider>().subscribeCourse(
         courseCode: course.courseCode,
-        role: role,
       );
       if (!mounted) return;
       await CenterToast.show(
@@ -293,211 +297,337 @@ class _CoursesScreenState extends State<CoursesScreen> {
     }
   }
 
-  void _openCourseDetails(CourseModel course) {
+  void _openCourseDetails(CourseModel course, {required bool canManage}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (context) => _CourseDetailsSheet(course: course),
+      builder: (context) =>
+          _CourseDetailsSheet(course: course, canManage: canManage),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final topPadding = MediaQuery.of(context).padding.top;
     final courseProvider = context.watch<CourseProvider>();
     final user = context.watch<UserProvider>().user;
-    final canManage = _canManage(user?.role);
-    var courses = _filteredCourses(courseProvider.courses);
+    final currentUserName = user?.userName;
 
-    if (widget.onlySubscribed) {
-      courses = courses.where((c) => c.isSubscribed).toList();
-    }
+    final isLoading =
+        courseProvider.isLoadingAll && courseProvider.allCourses.isEmpty;
+    final error = courseProvider.errorAll;
+
+    final teachingCourses = _filtered(
+      courseProvider.allCourses
+          .where((c) => c.createdBy == currentUserName)
+          .toList(),
+    );
+
+    final enrolledCourses = _filtered(
+      courseProvider.allCourses
+          .where((c) => c.isSubscribed && c.createdBy != currentUserName)
+          .toList(),
+    );
+
+    final discoverCourses = _filtered(
+      courseProvider.allCourses
+          .where((c) => c.createdBy != currentUserName)
+          .toList(),
+    );
 
     return Scaffold(
-      backgroundColor: AppColors.background,
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateModal,
-        backgroundColor: AppColors.primary,
-        tooltip: 'Create Schedule',
-        child: const Icon(Icons.add, size: 28),
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _CoursesHeader(
-              title: 'Courses',
-              subtitle: canManage ? 'Teacher workspace' : 'Student courses',
-              onBackTap: () => context.pop(),
+      backgroundColor: Colors.transparent,
+      floatingActionButton: _isMyMode
+          ? FloatingActionButton(
+              onPressed: _openCreateModal,
+              backgroundColor: AppColors.primary,
+              tooltip: 'Create Course',
+              child: const Icon(Icons.add, size: 28),
+            )
+          : null,
+      body: Stack(
+        children: [
+          // ── Animated green background ──────────────────────────────────
+          const Positioned.fill(
+            child: FloatingLinesBackground(
+              colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
+              lineCount: 6,
+              animationSpeed: 0.5,
             ),
-            Expanded(
-              child: RefreshIndicator(
-                color: AppColors.primary,
-                onRefresh: _loadCoursesForRole,
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
-                  children: [
-                    if (widget.showSearch)
-                      _CourseSearchField(
+          ),
+
+          // ── White body panel ───────────────────────────────────────────
+          Positioned(
+            top: topPadding + 70,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              decoration: const BoxDecoration(color: Colors.white),
+              child: Column(
+                children: [
+                  // ── Search field (Discover mode only) ───────────────────
+                  if (widget.showSearch && !_isMyMode)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: _CourseSearchField(
                         controller: _searchController,
-                        onChanged: (value) {
-                          setState(() => _searchText = value);
-                        },
+                        onChanged: (value) =>
+                            setState(() => _searchText = value),
                       ),
-                    const SizedBox(height: 14),
-                    _CourseSummary(
-                      total: widget.onlySubscribed
-                          ? courseProvider.courses
-                                .where((c) => c.isSubscribed)
-                                .length
-                          : courseProvider.courses.length,
-                      canManage: canManage,
-                      studentSubscribed: widget.onlySubscribed && !canManage,
                     ),
+
+                  // ── Tab bar (My Courses mode only) ──────────────────────
+                  if (_isMyMode) ...[
                     const SizedBox(height: 16),
-                    if (courseProvider.isLoading &&
-                        courseProvider.courses.isEmpty)
-                      const Padding(
-                        padding: EdgeInsets.symmetric(vertical: 36),
-                        child: Center(
-                          child: CircularProgressIndicator(
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: AppColors.primary.withOpacity(0.15),
+                          ),
+                        ),
+                        child: TabBar(
+                          controller: _tabController,
+                          labelColor: Colors.white,
+                          unselectedLabelColor: AppColors.primary,
+                          indicator: BoxDecoration(
                             color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(9),
                           ),
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          dividerColor: Colors.transparent,
+                          labelStyle: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13,
+                          ),
+                          tabs: const [
+                            Tab(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.edit_note_rounded, size: 16),
+                                  SizedBox(width: 4),
+                                  Text('Teaching'),
+                                ],
+                              ),
+                            ),
+                            Tab(
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.auto_stories_outlined, size: 16),
+                                  SizedBox(width: 4),
+                                  Text('Enrolled'),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                      )
-                    else if (courseProvider.error != null &&
-                        courseProvider.error!.isNotEmpty)
-                      _StatusPanel(
-                        icon: Icons.info_outline_rounded,
-                        title: 'Unable to display courses',
-                        message: _readableError(courseProvider.error!),
-                        actionLabel: 'Try again',
-                        onActionTap: _loadCoursesForRole,
-                      )
-                    else if (courses.isEmpty)
-                      _StatusPanel(
-                        icon: Icons.menu_book_outlined,
-                        title: _searchText.trim().isEmpty
-                            ? (widget.onlySubscribed
-                                  ? 'No subscribed courses'
-                                  : 'No courses yet')
-                            : 'No matching courses',
-                        message: canManage
-                            ? 'Create a course to make it available here.'
-                            : (widget.onlySubscribed
-                                  ? 'You have not subscribed to any courses yet.'
-                                  : 'Courses created by teachers will appear here.'),
-                        actionLabel: canManage
-                            ? 'Create course'
-                            : (widget.onlySubscribed
-                                  ? 'Browse courses'
-                                  : 'Refresh'),
-                        onActionTap: canManage
-                            ? _openCreateModal
-                            : (widget.onlySubscribed
-                                  ? () => context.push('/courses')
-                                  : _loadCoursesForRole),
-                      )
-                    else ...[
-                      Text(
-                        canManage
-                            ? 'My Courses'
-                            : (widget.onlySubscribed
-                                  ? 'Courses Subscribed'
-                                  : 'Available Courses'),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ] else
+                    const SizedBox(height: 16),
+
+                  // ── Content ──────────────────────────────────────────────
+                  Expanded(
+                    child: _isMyMode
+                        ? TabBarView(
+                            controller: _tabController,
+                            children: [
+                              _CourseTabView(
+                                courses: teachingCourses,
+                                isLoading: isLoading,
+                                error: error,
+                                emptyTitle: _searchText.trim().isEmpty
+                                    ? 'No courses created'
+                                    : 'No matching courses',
+                                emptyMessage:
+                                    'Create a course to make it available here.',
+                                emptyActionLabel: 'Create course',
+                                onEmptyAction: _openCreateModal,
+                                onRetry: _loadAllCourses,
+                                readableError: _readableError,
+                                itemBuilder: (course) => _CourseListCard(
+                                  course: course,
+                                  canManage: true,
+                                  showSubscribeButton: false,
+                                  onTap: () => _openCourseDetails(
+                                    course,
+                                    canManage: true,
+                                  ),
+                                  onEdit: () =>
+                                      _openCourseEditor(course: course),
+                                  onDelete: () => _deleteCourse(course),
+                                  onSubscribe: () => _subscribeCourse(course),
+                                ),
+                              ),
+                              _CourseTabView(
+                                courses: enrolledCourses,
+                                isLoading: isLoading,
+                                error: error,
+                                emptyTitle: _searchText.trim().isEmpty
+                                    ? 'Not enrolled in any courses'
+                                    : 'No matching enrolled courses',
+                                emptyMessage:
+                                    'Subscribe to a course in Discover to see it here.',
+                                emptyActionLabel: 'Discover courses',
+                                onEmptyAction: () =>
+                                    context.push('/courses/discover'),
+                                onRetry: _loadAllCourses,
+                                readableError: _readableError,
+                                itemBuilder: (course) => _CourseListCard(
+                                  course: course,
+                                  canManage: false,
+                                  showSubscribeButton: false,
+                                  onTap: () => _openCourseDetails(
+                                    course,
+                                    canManage: false,
+                                  ),
+                                  onEdit: () {},
+                                  onDelete: () {},
+                                  onSubscribe: () => _subscribeCourse(course),
+                                ),
+                              ),
+                            ],
+                          )
+                        : _CourseTabView(
+                            courses: discoverCourses,
+                            isLoading: isLoading,
+                            error: error,
+                            emptyTitle: _searchText.trim().isEmpty
+                                ? 'No courses available'
+                                : 'No matching courses',
+                            emptyMessage:
+                                'Courses created by other users will appear here.',
+                            emptyActionLabel: 'Refresh',
+                            onEmptyAction: _loadAllCourses,
+                            onRetry: _loadAllCourses,
+                            readableError: _readableError,
+                            itemBuilder: (course) => _CourseListCard(
+                              course: course,
+                              canManage: false,
+                              showSubscribeButton: true,
+                              onTap: () =>
+                                  _openCourseDetails(course, canManage: false),
+                              onEdit: () {},
+                              onDelete: () {},
+                              onSubscribe: () => _subscribeCourse(course),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // ── Top header (floats over the green background) ──────────────
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: SafeArea(
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+                child: Row(
+                  children: [
+                    IconButton(
+                      onPressed: () => context.pop(),
+                      icon: const Icon(Icons.arrow_back_ios_new_rounded),
+                      color: Colors.white,
+                    ),
+                    Expanded(
+                      child: Text(
+                        _isMyMode ? 'My Courses' : 'Discover Courses',
+                        textAlign: TextAlign.center,
                         style: const TextStyle(
-                          fontSize: 20,
+                          color: Colors.white,
+                          fontSize: 24,
                           fontWeight: FontWeight.w800,
-                          color: Color(0xFF1B3B22),
                         ),
                       ),
-                      const SizedBox(height: 10),
-                      ...courses.map(
-                        (course) => Padding(
-                          padding: const EdgeInsets.only(bottom: 12),
-                          child: _CourseListCard(
-                            course: course,
-                            canManage: canManage,
-                            onTap: () => _openCourseDetails(course),
-                            // ← now passes the required `course:` named param
-                            onEdit: () => _openCourseEditor(course: course),
-                            onDelete: () => _deleteCourse(course),
-                            onSubscribe: () => _subscribeCourse(course),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Header
+// Reusable tab content
 // ─────────────────────────────────────────────────────────────────────────────
 
-class _CoursesHeader extends StatelessWidget {
-  const _CoursesHeader({
-    required this.title,
-    required this.subtitle,
-    required this.onBackTap,
+class _CourseTabView extends StatelessWidget {
+  const _CourseTabView({
+    required this.courses,
+    required this.isLoading,
+    required this.error,
+    required this.emptyTitle,
+    required this.emptyMessage,
+    required this.emptyActionLabel,
+    required this.onEmptyAction,
+    required this.onRetry,
+    required this.readableError,
+    required this.itemBuilder,
   });
 
-  final String title;
-  final String subtitle;
-  final VoidCallback onBackTap;
+  final List<CourseModel> courses;
+  final bool isLoading;
+  final String? error;
+  final String emptyTitle;
+  final String emptyMessage;
+  final String emptyActionLabel;
+  final VoidCallback onEmptyAction;
+  final VoidCallback onRetry;
+  final String Function(String) readableError;
+  final Widget Function(CourseModel) itemBuilder;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      color: AppColors.secondary,
-      padding: EdgeInsets.fromLTRB(
-        8,
-        MediaQuery.of(context).padding.top + 8,
-        16,
-        18,
-      ),
-      child: Row(
-        children: [
-          IconButton(
-            onPressed: onBackTap,
-            icon: const Icon(Icons.arrow_back_ios_new_rounded),
-            color: Colors.white,
-            tooltip: 'Back',
-          ),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 24,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: const TextStyle(
-                    color: Color.fromARGB(210, 255, 255, 255),
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 48),
-        ],
+    if (isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    }
+    if (error != null && error!.isNotEmpty) {
+      return _StatusPanel(
+        icon: Icons.info_outline_rounded,
+        title: 'Unable to display courses',
+        message: readableError(error!),
+        actionLabel: 'Try again',
+        onActionTap: onRetry,
+      );
+    }
+    if (courses.isEmpty) {
+      return _StatusPanel(
+        icon: Icons.menu_book_outlined,
+        title: emptyTitle,
+        message: emptyMessage,
+        actionLabel: emptyActionLabel,
+        onActionTap: onEmptyAction,
+      );
+    }
+    return RefreshIndicator(
+      color: AppColors.primary,
+      onRefresh: () async => onRetry(),
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(16, 14, 16, 100),
+        itemCount: courses.length,
+        itemBuilder: (context, index) => Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: itemBuilder(courses[index]),
+        ),
       ),
     );
   }
@@ -522,85 +652,12 @@ class _CourseSearchField extends StatelessWidget {
         hintText: 'Search courses',
         prefixIcon: const Icon(Icons.search_rounded),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: const Color(0xFFF4F7F4),
         contentPadding: const EdgeInsets.symmetric(vertical: 14),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
           borderSide: BorderSide.none,
         ),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Summary chip
-// ─────────────────────────────────────────────────────────────────────────────
-
-class _CourseSummary extends StatelessWidget {
-  const _CourseSummary({
-    required this.total,
-    required this.canManage,
-    this.studentSubscribed = false,
-  });
-
-  final int total;
-  final bool canManage;
-  final bool studentSubscribed;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: AppColors.primary.withOpacity(0.08)),
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(
-              canManage ? Icons.edit_note_rounded : Icons.auto_stories_rounded,
-              color: AppColors.primary,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  canManage
-                      ? 'Created Courses'
-                      : (studentSubscribed
-                            ? 'Courses Attended'
-                            : 'Courses Available'),
-                  style: const TextStyle(
-                    color: Color(0xFF718096),
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '$total courses',
-                  style: const TextStyle(
-                    color: Color(0xFF1B3B22),
-                    fontSize: 22,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -614,6 +671,7 @@ class _CourseListCard extends StatelessWidget {
   const _CourseListCard({
     required this.course,
     required this.canManage,
+    required this.showSubscribeButton,
     required this.onTap,
     required this.onEdit,
     required this.onDelete,
@@ -622,6 +680,7 @@ class _CourseListCard extends StatelessWidget {
 
   final CourseModel course;
   final bool canManage;
+  final bool showSubscribeButton;
   final VoidCallback onTap;
   final VoidCallback onEdit;
   final VoidCallback onDelete;
@@ -630,6 +689,7 @@ class _CourseListCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final description = course.description?.trim();
+    final hasImage = course.courseImg != null && course.courseImg!.isNotEmpty;
 
     return Material(
       color: Colors.white,
@@ -638,170 +698,218 @@ class _CourseListCard extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-          padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: AppColors.primary.withOpacity(0.08)),
           ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(
-                      Icons.menu_book_outlined,
-                      color: AppColors.primary,
-                      size: 28,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Header image ───────────────────────────────────────
+                if (hasImage)
+                  SizedBox(
+                    height: 130,
+                    width: double.infinity,
+                    child: Image.network(
+                      course.courseImg!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => Container(
+                        color: AppColors.primary.withOpacity(0.08),
+                        child: const Center(
+                          child: Icon(
+                            Icons.image_not_supported_outlined,
+                            color: AppColors.primary,
+                            size: 32,
+                          ),
+                        ),
+                      ),
+                      loadingBuilder: (_, child, loadingProgress) {
+                        if (loadingProgress == null) return child;
+                        return Container(
+                          color: AppColors.primary.withOpacity(0.06),
+                          child: const Center(
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                              strokeWidth: 2,
+                            ),
+                          ),
+                        );
+                      },
                     ),
                   ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
+
+                // ── Card content ───────────────────────────────────────
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: BoxDecoration(
+                              color: AppColors.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(
+                              Icons.menu_book_outlined,
+                              color: AppColors.primary,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  course.courseName,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: Color(0xFF1B3B22),
+                                    fontSize: 17,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  course.courseCode,
+                                  style: const TextStyle(
+                                    color: Color(0xFF718096),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (canManage)
+                            PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_vert_rounded),
+                              tooltip: 'Course actions',
+                              onSelected: (value) {
+                                if (value == 'edit') onEdit();
+                                if (value == 'delete') onDelete();
+                              },
+                              itemBuilder: (context) => [
+                                PopupMenuItem(
+                                  value: 'edit',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.edit_outlined,
+                                        size: 20,
+                                        color: AppColors.success,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Text(
+                                        'Edit',
+                                        style: TextStyle(
+                                          color: AppColors.darkText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                PopupMenuItem(
+                                  value: 'delete',
+                                  child: Row(
+                                    children: [
+                                      Icon(
+                                        Icons.delete_outline,
+                                        size: 20,
+                                        color: AppColors.error,
+                                      ),
+                                      const SizedBox(width: 10),
+                                      const Text(
+                                        'Delete',
+                                        style: TextStyle(
+                                          color: AppColors.darkText,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            )
+                          else
+                            const Icon(
+                              Icons.chevron_right_rounded,
+                              color: Color(0xFF718096),
+                            ),
+                        ],
+                      ),
+                      if (description != null && description.isNotEmpty) ...[
+                        const SizedBox(height: 12),
                         Text(
-                          course.courseName,
+                          description,
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFF1B3B22),
-                            fontSize: 17,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          course.courseCode,
-                          style: const TextStyle(
-                            color: Color(0xFF718096),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
+                            color: Color(0xFF4A5568),
+                            fontSize: 14,
+                            height: 1.35,
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  if (canManage)
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert_rounded),
-                      tooltip: 'Course actions',
-                      onSelected: (value) {
-                        if (value == 'edit') onEdit();
-                        if (value == 'delete') onDelete();
-                      },
-                      itemBuilder: (context) => [
-                        PopupMenuItem(
-                          value: 'edit',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.edit_outlined,
-                                size: 20,
-                                color: AppColors.success,
-                              ),
-                              const SizedBox(width: 10),
-                              const Text(
-                                'Edit',
-                                style: TextStyle(color: AppColors.darkText),
-                              ),
-                            ],
+                      const SizedBox(height: 14),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _CourseChip(
+                            icon: Icons.person_outline_rounded,
+                            label: 'Creator ${_creatorName(course.createdBy)}',
                           ),
-                        ),
-                        PopupMenuItem(
-                          value: 'delete',
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.delete_outline,
-                                size: 20,
-                                color: AppColors.error,
-                              ),
-                              const SizedBox(width: 10),
-                              const Text(
-                                'Delete',
-                                style: TextStyle(color: AppColors.darkText),
-                              ),
-                            ],
+                          _CourseChip(
+                            icon: Icons.calendar_today_outlined,
+                            label: _formatDate(course.createdAt),
                           ),
-                        ),
-                      ],
-                    )
-                  else
-                    const Icon(
-                      Icons.chevron_right_rounded,
-                      color: Color(0xFF718096),
-                    ),
-                ],
-              ),
-              if (description != null && description.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Text(
-                  description,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Color(0xFF4A5568),
-                    fontSize: 14,
-                    height: 1.35,
-                  ),
-                ),
-              ],
-              const SizedBox(height: 14),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _CourseChip(
-                    icon: Icons.person_outline_rounded,
-                    label: 'Creator ${_creatorName(course.createdBy)}',
-                  ),
-                  _CourseChip(
-                    icon: Icons.calendar_today_outlined,
-                    label: _formatDate(course.createdAt),
-                  ),
-                  _CourseChip(
-                    icon: Icons.groups_outlined,
-                    label: '${course.subscriberCount} students',
-                  ),
-                ],
-              ),
-              if (!canManage) ...[
-                const SizedBox(height: 14),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: course.isSubscribed ? null : onSubscribe,
-                    icon: Icon(
-                      course.isSubscribed
-                          ? Icons.check_circle_outline
-                          : Icons.add_circle_outline,
-                    ),
-                    label: Text(
-                      course.isSubscribed ? 'Subscribed' : 'Subscribe',
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.primary,
-                      disabledBackgroundColor: const Color(0xFFE8F1EA),
-                      foregroundColor: Colors.white,
-                      disabledForegroundColor: AppColors.primary,
-                      elevation: 0,
-                      minimumSize: const Size.fromHeight(44),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
+                          _CourseChip(
+                            icon: Icons.groups_outlined,
+                            label: '${course.subscriberCount} students',
+                          ),
+                        ],
                       ),
-                    ),
+                      if (showSubscribeButton) ...[
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: course.isSubscribed ? null : onSubscribe,
+                            icon: Icon(
+                              course.isSubscribed
+                                  ? Icons.check_circle_outline
+                                  : Icons.add_circle_outline,
+                            ),
+                            label: Text(
+                              course.isSubscribed ? 'Subscribed' : 'Subscribe',
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              disabledBackgroundColor: const Color(0xFFE8F1EA),
+                              foregroundColor: Colors.white,
+                              disabledForegroundColor: AppColors.primary,
+                              elevation: 0,
+                              minimumSize: const Size.fromHeight(44),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
                 ),
               ],
-            ],
+            ),
           ),
         ),
       ),
@@ -1031,117 +1139,248 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Course details bottom sheet
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 class _CourseDetailsSheet extends StatelessWidget {
-  const _CourseDetailsSheet({required this.course});
+  const _CourseDetailsSheet({required this.course, required this.canManage});
 
   final CourseModel course;
+  final bool canManage;
 
   @override
   Widget build(BuildContext context) {
-    final description = course.description?.trim();
+    // Adds the device's bottom safe-area inset (home indicator / gesture
+    // bar / rounded corners) directly into the sheet's own background so
+    // there is no gap showing the page behind it on any phone shape.
+    final bottomInset = MediaQuery.of(context).padding.bottom;
 
-    return SafeArea(
-      child: Container(
-        width: double.infinity,
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+      ),
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 24 + bottomInset),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Container(
+              width: 44,
+              height: 5,
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
                 decoration: BoxDecoration(
-                  color: Colors.grey[300],
+                  color: AppColors.primary.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Icon(
-                    Icons.auto_stories_outlined,
-                    color: AppColors.primary,
-                  ),
+                child: const Icon(
+                  Icons.auto_stories_outlined,
+                  color: AppColors.primary,
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        course.courseName,
-                        style: const TextStyle(
-                          color: Color(0xFF1B3B22),
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                        ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      course.courseName,
+                      style: const TextStyle(
+                        color: Color(0xFF1B3B22),
+                        fontSize: 22,
+                        fontWeight: FontWeight.w800,
                       ),
-                      const SizedBox(height: 4),
-                      Text(
-                        course.courseCode,
-                        style: const TextStyle(
-                          color: Color(0xFF718096),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w700,
-                        ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      course.courseCode,
+                      style: const TextStyle(
+                        color: Color(0xFF718096),
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Description',
-              style: TextStyle(
-                color: Color(0xFF1B3B22),
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          // ── Course image ──────────────────────────────────────────
+          if (course.courseImg != null && course.courseImg!.isNotEmpty)
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: Image.network(
+                course.courseImg!,
+                height: 160,
+                width: double.infinity,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                loadingBuilder: (_, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    height: 160,
+                    color: AppColors.primary.withOpacity(0.06),
+                    child: const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                        strokeWidth: 2,
+                      ),
+                    ),
+                  );
+                },
               ),
             ),
-            const SizedBox(height: 8),
-            Text(
-              description == null || description.isEmpty
-                  ? 'No description provided.'
-                  : description,
-              style: const TextStyle(
-                color: Color(0xFF4A5568),
-                fontSize: 15,
-                height: 1.45,
-              ),
+          if (course.courseImg != null && course.courseImg!.isNotEmpty)
+            const SizedBox(height: 22),
+
+          // ── Teaching side ─────────────────────────────────────────────
+          if (canManage) ...[
+            SelectedCard(
+              icon: Icons.qr_code_rounded,
+              iconColor: Colors.teal,
+              title: 'QR Code',
+              subtitle: 'Get QR code for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push(
+                  '/courses/qr',
+                  extra: {
+                    'courseCode': course.courseCode,
+                    'courseName': course.courseName,
+                  },
+                );
+              },
             ),
-            const SizedBox(height: 18),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _CourseChip(
-                  icon: Icons.person_outline_rounded,
-                  label: 'Creator ${_creatorName(course.createdBy)}',
-                ),
-                _CourseChip(
-                  icon: Icons.calendar_today_outlined,
-                  label: _formatDate(course.createdAt),
-                ),
-              ],
+            const SizedBox(height: 12),
+
+            SelectedCard(
+              icon: Icons.assignment_outlined,
+              iconColor: Colors.blue,
+              title: 'Assessment',
+              subtitle: 'Manage assessment for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/assessment');
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.grade_outlined,
+              iconColor: Colors.amber,
+              title: 'Grade',
+              subtitle: 'Manage grade from this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('');
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.fact_check_outlined,
+              iconColor: Colors.orange,
+              title: 'Attendance',
+              subtitle: 'Manage attendance for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push(
+                  '/attendance/home',
+                  extra: {
+                    'courseCode': course.courseCode,
+                    'courseName': course.courseName,
+                  },
+                );
+              },
             ),
           ],
-        ),
+
+          // ── Enrolled side ─────────────────────────────────────────────
+          if (!canManage) ...[
+            SelectedCard(
+              icon: Icons.assignment_outlined,
+              iconColor: Colors.blue,
+              title: 'Assessment',
+              subtitle: 'View assessment for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/assessment');
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.grade_outlined,
+              iconColor: Colors.amber,
+              title: 'Grade',
+              subtitle: 'View grade from this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('');
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.fact_check_outlined,
+              iconColor: Colors.yellow,
+              title: 'Attendance',
+              subtitle: 'View attendance for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push(
+                  '/attendance/student/course-report',
+                  extra: {
+                    'studentId': context.read<UserProvider>().user?.id ?? '',
+                    'studentName':
+                        context.read<UserProvider>().user?.userName ??
+                        'Student',
+                    'courseCode': course.courseCode,
+                    'courseName': course.courseName,
+                  },
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.how_to_reg_rounded,
+              iconColor: Colors.orange,
+              title: 'Mark Attendance',
+              subtitle: 'Mark your own attendance for an active session',
+              onTap: () {
+                Navigator.pop(context);
+                context.push(
+                  '/attendance/mark',
+                  extra: {'courseCode': course.courseCode},
+                );
+              },
+            ),
+            const SizedBox(height: 12),
+            SelectedCard(
+              icon: Icons.task_alt_outlined,
+              iconColor: Colors.indigo,
+              title: 'Tasks',
+              subtitle: 'View assigned tasks for this course',
+              onTap: () {
+                Navigator.pop(context);
+                context.push('/tasks'); // change to your route
+              },
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -1168,34 +1407,33 @@ class _StatusPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.primary, size: 38),
-          const SizedBox(height: 10),
-          Text(
-            title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Color(0xFF1B3B22),
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: AppColors.primary, size: 38),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: Color(0xFF1B3B22),
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
             ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Color(0xFF718096), height: 1.35),
-          ),
-          const SizedBox(height: 14),
-          OutlinedButton(onPressed: onActionTap, child: Text(actionLabel)),
-        ],
+            const SizedBox(height: 6),
+            Text(
+              message,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Color(0xFF718096), height: 1.35),
+            ),
+            const SizedBox(height: 14),
+            OutlinedButton(onPressed: onActionTap, child: Text(actionLabel)),
+          ],
+        ),
       ),
     );
   }

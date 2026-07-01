@@ -1,24 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/setting_provider.dart';
+import '../modals/language_modal.dart';
+import '../modals/notification_modal.dart';
 
 class ProfileMoreCard extends StatelessWidget {
   final Map<String, dynamic>? user;
   final VoidCallback onLogout;
-  final VoidCallback onNotificationTap;
-  final VoidCallback onLanguageTap;
 
   const ProfileMoreCard({
     super.key,
     required this.user,
     required this.onLogout,
-    required this.onNotificationTap,
-    required this.onLanguageTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    final notification = user?['notification'] ?? 'ON';
-    final language = user?['language'] ?? 'ENGLISH';
+    final settings = context.watch<SettingsProvider>();
+
+    final notification = settings.notification;
+    final language = settings.language;
+    final themeMode = settings.themeMode;
     final langLabel = language == 'KHMER' ? 'ខ្មែរ' : 'English';
+    final themeLabel = themeMode == 'DARK' ? 'Dark' : 'Light';
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -37,6 +41,7 @@ class ProfileMoreCard extends StatelessWidget {
         ),
         child: Column(
           children: [
+            // ─── Header ─────────────────────────────────────────
             Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -55,6 +60,8 @@ class ProfileMoreCard extends StatelessWidget {
               ),
             ),
             Divider(height: 1, color: Colors.grey[200]),
+
+            // ─── Notification ────────────────────────────────────
             _buildOption(
               icon: Icons.notifications,
               label: 'Notification',
@@ -63,21 +70,46 @@ class ProfileMoreCard extends StatelessWidget {
                   ? const Color(0xFF2E7D32)
                   : const Color(0xFF9E9E9E),
               hasArrow: true,
-              onTap: onNotificationTap,
+              onTap: () => showNotificationModal(
+                context,
+                currentValue: notification,
+                onSave: (val) =>
+                    context.read<SettingsProvider>().setNotification(val),
+              ),
             ),
+
+            // ─── Language ────────────────────────────────────────
             _buildOption(
               icon: Icons.language,
               label: 'Languages',
               subtitle: langLabel,
               hasArrow: true,
-              onTap: onLanguageTap,
+              onTap: () => showLanguageModal(
+                context,
+                currentValue: language,
+                onSave: (val) =>
+                    context.read<SettingsProvider>().setLanguage(val),
+              ),
             ),
+
+            // ─── Theme ───────────────────────────────────────────
+            _buildOption(
+              icon: themeMode == 'DARK' ? Icons.dark_mode : Icons.light_mode,
+              label: 'Theme',
+              subtitle: themeLabel,
+              hasArrow: true,
+              onTap: () => context.read<SettingsProvider>().toggleTheme(),
+            ),
+
+            // ─── Support ─────────────────────────────────────────
             _buildOption(
               icon: Icons.help_outline,
               label: 'Support',
-              subtitle: 'need help?',
+              subtitle: 'Need help?',
               hasArrow: true,
             ),
+
+            // ─── Logout ──────────────────────────────────────────
             _buildOption(
               icon: Icons.logout,
               label: 'Log out',

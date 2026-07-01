@@ -6,7 +6,6 @@ import 'package:provider/provider.dart';
 import '../models/schedule_model.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/course_provider.dart';
-import '../providers/user_provider.dart';
 import '../modals/schedule_modal.dart';
 import '../widgets/schedule_header.dart';
 import '../widgets/schedule_day_view.dart';
@@ -45,8 +44,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     selectedDate = DateTime(now.year, now.month, now.day);
     weekStart = _mondayOf(selectedDate);
     monthStart = _firstOfMonth(selectedDate);
-    Future.microtask(() => context.read<ScheduleProvider>().loadSchedules());
+    Future.microtask(() {
+      if (!mounted) return;
+      context.read<ScheduleProvider>().loadSchedules();
+    });
   }
+
+  // ── Recurrence filter ────────────────────────────────────────────────────────
 
   bool _shouldShowOnDate(ScheduleModel s, DateTime date) {
     final r = s.recurrenceType.toLowerCase().trim();
@@ -95,14 +99,17 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // ── Task counts ──────────────────────────────────────────────────────────────
+
   int _weekTaskCount(List<ScheduleModel> schedules) {
     final seen = <String>{};
     var count = 0;
     for (var i = 0; i < 7; i++) {
       final day = weekStart.add(Duration(days: i));
       for (final s in schedules) {
-        if (_shouldShowOnDate(s, day) && seen.add('${s.scheduleId}-$day'))
+        if (_shouldShowOnDate(s, day) && seen.add('${s.scheduleId}-$day')) {
           count++;
+        }
       }
     }
     return count;
@@ -115,12 +122,15 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     for (var d = 1; d <= days; d++) {
       final day = DateTime(monthStart.year, monthStart.month, d);
       for (final s in schedules) {
-        if (_shouldShowOnDate(s, day) && seen.add('${s.scheduleId}-$day'))
+        if (_shouldShowOnDate(s, day) && seen.add('${s.scheduleId}-$day')) {
           count++;
+        }
       }
     }
     return count;
   }
+
+  // ── Navigation ───────────────────────────────────────────────────────────────
 
   void _move(int dir) {
     setState(() {
@@ -201,6 +211,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 
+  // ── CRUD helpers ─────────────────────────────────────────────────────────────
+
   Future<void> _handleEdit(ScheduleModel s) async {
     await showCreateScheduleModal(
       context,
@@ -221,9 +233,9 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         'selectedDays': s.selectedDays,
       },
       onSubmit: (_) async {
+        if (!mounted) return;
         await context.read<ScheduleProvider>().loadSchedules();
-        final role = context.read<UserProvider>().user?.role;
-        await context.read<CourseProvider>().loadCourses(role: role);
+        await context.read<CourseProvider>().loadCourses();
       },
     );
   }
@@ -246,15 +258,18 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         ],
       ),
     );
-    if (ok != true) return;
+    if (ok != true || !mounted) return;
     await context.read<ScheduleProvider>().removeSchedule(s.scheduleId);
+    if (!mounted) return;
     final err = context.read<ScheduleProvider>().error;
-    if (err != null && mounted) {
+    if (err != null) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(err), backgroundColor: Colors.red));
     }
   }
+
+  // ── Formatting ───────────────────────────────────────────────────────────────
 
   static const _months = [
     'January',
@@ -285,9 +300,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
 
   String _formatMonthYear(DateTime d) => '${_months[d.month - 1]} ${d.year}';
 
+  // ── Build ─────────────────────────────────────────────────────────────────────
+
   @override
   Widget build(BuildContext context) {
+    // Single watch — rebuilds whenever the provider notifies.
     final provider = context.watch<ScheduleProvider>();
+    final schedules = provider.schedules;
     final topPadding = MediaQuery.of(context).padding.top;
 
     final bool isWeekOrMonth =
@@ -300,17 +319,16 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       case ScheduleViewMode.day:
         titleText = _formatFullDate(selectedDate);
         subtitleText =
-            'You have ${provider.schedules.where((s) => _shouldShowOnDate(s, selectedDate)).length} tasks scheduled.';
+            'You have ${schedules.where((s) => _shouldShowOnDate(s, selectedDate)).length} tasks scheduled.';
         break;
       case ScheduleViewMode.week:
         titleText = _formatMonthYear(weekStart);
-        subtitleText =
-            'You have ${_weekTaskCount(provider.schedules)} tasks this week.';
+        subtitleText = 'You have ${_weekTaskCount(schedules)} tasks this week.';
         break;
       case ScheduleViewMode.month:
         titleText = _formatMonthYear(monthStart);
         subtitleText =
-            'You have ${_monthTaskCount(provider.schedules)} tasks this month.';
+            'You have ${_monthTaskCount(schedules)} tasks this month.';
         break;
     }
 
@@ -318,6 +336,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
       backgroundColor: Colors.transparent,
       body: Stack(
         children: [
+          // ── Animated background ──────────────────────────────────────────────
           const Positioned.fill(
             child: FloatingLinesBackground(
               colors: [Color(0xFF00FF88), Color(0xFF00DD66), Color(0xFF1E6B2D)],
@@ -325,6 +344,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               animationSpeed: 0.5,
             ),
           ),
+
+          // ── Main white card ──────────────────────────────────────────────────
           Positioned(
             top: topPadding + 70,
             left: 0,
@@ -335,6 +356,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ── Header title area ──────────────────────────────────────
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 24, 20, 0),
                     child: isWeekOrMonth
@@ -454,11 +476,14 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
                             ],
                           ),
                   ),
+
                   const SizedBox(height: 20),
+
+                  // ── Content ────────────────────────────────────────────────
                   Expanded(
                     child: provider.isLoading
                         ? const Center(child: CircularProgressIndicator())
-                        : provider.error != null && provider.schedules.isEmpty
+                        : provider.error != null && schedules.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
@@ -481,6 +506,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
               ),
             ),
           ),
+
+          // ── Top overlay header (mode switcher, back, refresh) ────────────────
           Positioned(
             top: 0,
             left: 0,
@@ -500,12 +527,13 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
   }
 
   Widget _buildContent(ScheduleProvider provider) {
+    final schedules = provider.schedules;
     switch (_viewMode) {
       case ScheduleViewMode.day:
         return ScheduleDayView(
           visibleStartDate: weekStart,
           selectedDate: selectedDate,
-          visibleSchedules: provider.schedules
+          visibleSchedules: schedules
               .where((s) => _shouldShowOnDate(s, selectedDate))
               .toList(),
           onDateSelected: (date) => setState(() {
@@ -518,7 +546,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return ScheduleWeekView(
           visibleStartDate: weekStart,
           selectedDate: selectedDate,
-          allSchedules: provider.schedules,
+          allSchedules: schedules,
           onEdit: _handleEdit,
           onDelete: _handleDelete,
           onDateSelected: (date) => setState(() {
@@ -530,7 +558,7 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
         return ScheduleMonthView(
           focusedMonth: monthStart,
           selectedDate: selectedDate,
-          allSchedules: provider.schedules,
+          allSchedules: schedules,
           onEdit: _handleEdit,
           onDelete: _handleDelete,
           onDateSelected: (date) => setState(() {
@@ -543,6 +571,8 @@ class _ScheduleScreenState extends State<ScheduleScreen> {
     }
   }
 }
+
+// ── Nav button ────────────────────────────────────────────────────────────────
 
 class _NavCircleButton extends StatelessWidget {
   final IconData icon;

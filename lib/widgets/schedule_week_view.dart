@@ -9,7 +9,46 @@ const Color _lineColor = Color(0xFFE9ECEF);
 const int _startHour = 7;
 const int _endHour = 22;
 const double _hourHeight = 60.0;
-const double _timeGutterWidth = 40.0; // narrower gutter, shifted left
+const double _timeGutterWidth = 40.0;
+
+// ── Overlap helpers (per-day column) ─────────────────────────────────────────
+
+int _timeToMinutes(String time) {
+  final parts = time.split(':');
+  final hour = int.tryParse(parts[0]) ?? 0;
+  final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
+  return hour * 60 + minute;
+}
+
+bool _overlaps(ScheduleModel a, ScheduleModel b) {
+  final aStart = _timeToMinutes(a.startTime);
+  final aEnd = _timeToMinutes(a.endTime);
+  final bStart = _timeToMinutes(b.startTime);
+  final bEnd = _timeToMinutes(b.endTime);
+  return aStart < bEnd && bStart < aEnd;
+}
+
+/// Groups tasks that overlap into clusters (creation order preserved).
+List<List<ScheduleModel>> _buildOverlapGroups(List<ScheduleModel> tasks) {
+  final groups = <List<ScheduleModel>>[];
+  for (final task in tasks) {
+    List<ScheduleModel>? target;
+    for (final group in groups) {
+      if (group.any((g) => _overlaps(g, task))) {
+        target = group;
+        break;
+      }
+    }
+    if (target != null) {
+      target.add(task);
+    } else {
+      groups.add([task]);
+    }
+  }
+  return groups;
+}
+
+// ── Week view ─────────────────────────────────────────────────────────────────
 
 class ScheduleWeekView extends StatelessWidget {
   final DateTime visibleStartDate;
@@ -39,7 +78,7 @@ class ScheduleWeekView extends StatelessWidget {
     'SUN',
   ];
 
-  // ── Recurrence ──────────────────────────────────────────────────────────
+  // ── Recurrence ──────────────────────────────────────────────────────────────
   bool _isOnDate(ScheduleModel s, DateTime date) {
     final r = s.recurrenceType.toLowerCase().trim();
     if (r == 'none') {
@@ -102,14 +141,14 @@ class ScheduleWeekView extends StatelessWidget {
   double _timeToOffset(String time) {
     final parts = time.split(':');
     final hour = int.tryParse(parts[0]) ?? 0;
-    final minute = int.tryParse(parts[1]) ?? 0;
+    final minute = parts.length > 1 ? (int.tryParse(parts[1]) ?? 0) : 0;
     return ((hour + minute / 60) - _startHour) * _hourHeight;
   }
 
   Color _taskColor(ScheduleModel s) {
     try {
-      if (s.color == null || s.color!.isEmpty) return _accentColor;
-      final hex = s.color!.replaceAll('#', '');
+      if (s.color.isEmpty) return _accentColor;
+      final hex = s.color.replaceAll('#', '');
       final rrggbb = hex.length > 6 ? hex.substring(hex.length - 6) : hex;
       return Color(int.parse('FF$rrggbb', radix: 16));
     } catch (_) {
@@ -132,16 +171,13 @@ class ScheduleWeekView extends StatelessWidget {
 
     return Column(
       children: [
-        // ── Day header strip ─────────────────────────────────────────────
+        // ── Day header strip ───────────────────────────────────────────────────
         Padding(
           padding: const EdgeInsets.only(left: 8, right: 16),
           child: Row(
             children: [
-              // Spacer to align with the time gutter
               SizedBox(width: _timeGutterWidth + 8),
-              ...days.asMap().entries.map((entry) {
-                final i = entry.key;
-                final date = entry.value;
+              ...days.map((date) {
                 final isWeekend = date.weekday == 6 || date.weekday == 7;
                 final isSelected =
                     date.year == selectedDate.year &&
@@ -213,7 +249,7 @@ class ScheduleWeekView extends StatelessWidget {
           ),
         ),
 
-        // ── Timeline ─────────────────────────────────────────────────────
+        // ── Timeline ──────────────────────────────────────────────────────────
         Expanded(
           child: SingleChildScrollView(
             padding: const EdgeInsets.only(left: 8, right: 16),
@@ -280,7 +316,7 @@ class ScheduleWeekView extends StatelessWidget {
                                     ),
                                   ),
 
-                                // Tasks
+                                // Tasks per day with overlap queuing
                                 for (var di = 0; di < days.length; di++)
                                   ..._buildDayTasks(days[di], di, colWidth),
                               ],
@@ -299,45 +335,67 @@ class ScheduleWeekView extends StatelessWidget {
     );
   }
 
-  List<Widget> _buildDayTasks(DateTime date, int col, double colWidth) {
+  /// Builds task chips for one day column, splitting overlapping tasks into
+  /// sub-columns (queues) within that day's column.
+  List<Widget> _buildDayTasks(DateTime date, int dayIndex, double dayColWidth) {
     final tasks = allSchedules.where((s) => _isOnDate(s, date)).toList();
-    return tasks.map((task) {
-      final top = max(0.0, _timeToOffset(task.startTime));
-      final bottom = _timeToOffset(task.endTime);
-      final height = max(22.0, bottom - top);
-      final color = _taskColor(task);
+    if (tasks.isEmpty) return [];
 
-      return Positioned(
-        top: top,
-        left: colWidth * col + 2,
-        width: colWidth - 4,
-        height: height,
-        child: GestureDetector(
-          onTap: () => onEdit(task),
-          onLongPress: () => onDelete(task),
-          child: Container(
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.13),
-              borderRadius: BorderRadius.circular(5),
-              border: Border(left: BorderSide(color: color, width: 3)),
-            ),
-            padding: const EdgeInsets.all(2),
-            child: Center(
-              child: Text(
-                task.courseCode,
-                style: TextStyle(
-                  fontSize: 8,
-                  fontWeight: FontWeight.w800,
-                  color: color,
+    final groups = _buildOverlapGroups(tasks);
+    final widgets = <Widget>[];
+
+    for (final group in groups) {
+      final groupSize = group.length;
+
+      // Width of each queue slot inside this day's column (with small gap).
+      final slotWidth = (dayColWidth - 4) / groupSize;
+
+      for (var qi = 0; qi < groupSize; qi++) {
+        final task = group[qi];
+        final top = max(0.0, _timeToOffset(task.startTime));
+        final bottom = _timeToOffset(task.endTime);
+        final height = max(20.0, bottom - top);
+        final color = _taskColor(task);
+
+        // Left edge: day column start + queue slot offset + 2px outer gap.
+        final left = dayColWidth * dayIndex + 2 + slotWidth * qi;
+
+        widgets.add(
+          Positioned(
+            top: top,
+            left: left,
+            width: slotWidth - 2, // 2px gap between queue slots
+            height: height,
+            child: GestureDetector(
+              onTap: () => onEdit(task),
+              onLongPress: () => onDelete(task),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.13),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border(left: BorderSide(color: color, width: 3)),
                 ),
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 2),
+                child: Center(
+                  child: Text(
+                    task.courseCode,
+                    style: TextStyle(
+                      fontSize: 7,
+                      fontWeight: FontWeight.w800,
+                      color: color,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    textAlign: TextAlign.center,
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-      );
-    }).toList();
+        );
+      }
+    }
+
+    return widgets;
   }
 }
