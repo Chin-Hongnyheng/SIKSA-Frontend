@@ -20,7 +20,11 @@ Future<void> main() async {
   await dotenv.load(fileName: ".env");
   await AuthProvider.loadTokens();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await GoogleSignIn.instance.initialize();
+  try {
+    await GoogleSignIn.instance.initialize();
+  } catch (e) {
+    debugPrint('Google SignIn initialization skipped or failed: $e');
+  }
   runApp(
     MultiProvider(
       providers: [
