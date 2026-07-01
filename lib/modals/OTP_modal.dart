@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../widgets/button.dart';
 import '../widgets/OTP_field.dart';
-import '../service/OTP_service.dart';
+import '../service/otp_service.dart';
 import '../widgets/center_toast.dart';
 
 class OtpModal extends StatefulWidget {
