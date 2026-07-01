@@ -40,9 +40,8 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
     }
     if (!mounted) return;
 
-    final role = userProvider.user?.role;
     await Future.wait([
-      context.read<CourseProvider>().loadCourses(role: role),
+      context.read<CourseProvider>().loadCourses(),
       context.read<CourseProvider>().loadAllCourses(),
       context.read<CourseProvider>().loadTeacherStudentCount(),
       context.read<AssessmentProvider>().loadAllAssessments(),

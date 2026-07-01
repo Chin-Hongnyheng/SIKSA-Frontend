@@ -71,7 +71,7 @@ class _GradingScreenState extends State<GradingScreen>
 
   Future<void> _loadInitialData() async {
     final courseProvider = context.read<CourseProvider>();
-    await courseProvider.loadCourses(role: 'Teacher');
+    await courseProvider.loadCourses();
     if (courseProvider.courses.isNotEmpty) {
       _selectedCourseCode = courseProvider.courses.first.courseCode;
       await _loadCourseData();
