@@ -1,6 +1,8 @@
 // ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
+import '../providers/notification_provider.dart';
+import '../service/notification_service.dart';
 import '../widgets/textfield.dart';
 import '../widgets/phonetextfield.dart';
 import '../widgets/logo.dart';
@@ -84,6 +86,12 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       if (!context.mounted) return;
       await context.read<UserProvider>().loadUser();
 
+      if (context.mounted) {
+        await NotificationService.registerDevice(
+          context.read<NotificationProvider>(),
+        );
+      }
+
       await CenterToast.show(
         context,
         message: isSignUp ? "Registered with Google!" : "Login successful",
@@ -134,6 +142,12 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
 
       if (!context.mounted) return;
       await context.read<UserProvider>().loadUser();
+
+      if (context.mounted) {
+        await NotificationService.registerDevice(
+          context.read<NotificationProvider>(),
+        );
+      }
       await CenterToast.show(
         context,
         message: "Login successful",
@@ -369,6 +383,9 @@ class _AuthenticationScreenState extends State<AuthenticationScreen> {
       await Future.delayed(const Duration(milliseconds: 300));
       if (registered && context.mounted) {
         await context.read<UserProvider>().loadUser();
+        await NotificationService.registerDevice(
+          context.read<NotificationProvider>(),
+        );
         await CenterToast.show(
           context,
           message: "Register successful",
