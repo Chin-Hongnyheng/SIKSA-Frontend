@@ -13,18 +13,33 @@ import 'providers/schedule_provider.dart';
 import 'providers/setting_provider.dart';
 import 'providers/user_provider.dart';
 import 'providers/attendance_provider.dart';
+<<<<<<< HEAD
 import 'providers/grade_provider.dart';
+=======
+import 'providers/notification_provider.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
+@pragma('vm:entry-point')
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+}
+>>>>>>> 856b57c5ea4757de77c69653abe22b2f3cbd0602
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
   await AuthProvider.loadTokens();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+<<<<<<< HEAD
   try {
     await GoogleSignIn.instance.initialize();
   } catch (e) {
     debugPrint('Google SignIn initialization skipped or failed: $e');
   }
+=======
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  await GoogleSignIn.instance.initialize();
+>>>>>>> 856b57c5ea4757de77c69653abe22b2f3cbd0602
   runApp(
     MultiProvider(
       providers: [
@@ -41,7 +56,11 @@ Future<void> main() async {
         ChangeNotifierProvider(create: (_) => AttendanceProvider()),
         ChangeNotifierProvider(create: (_) => GradeProvider()),
         ChangeNotifierProvider(create: (_) => SettingsProvider()),
+<<<<<<< HEAD
 
+=======
+        ChangeNotifierProvider(create: (_) => NotificationProvider()),
+>>>>>>> 856b57c5ea4757de77c69653abe22b2f3cbd0602
       ],
       child: const MyApp(),
     ),

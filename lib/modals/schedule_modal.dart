@@ -89,6 +89,22 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
   bool get _isEditing => widget.scheduleId != null;
 
+  // ── Session time window & minimum duration rules ─────────────────────
+  //
+  // Sessions may only be scheduled between 7:00 AM and 10:00 PM, and must
+  // be at least 1 hour long (no 10/20/30-minute sessions).
+  static const int _earliestAllowedMinutes = 7 * 60; // 7:00 AM
+  static const int _latestAllowedMinutes = 22 * 60; // 10:00 PM
+  static const int _minDurationMinutes = 60; // 1 hour
+
+  int _timeToMinutes(TimeOfDay time) => time.hour * 60 + time.minute;
+
+  bool _isWithinAllowedWindow(TimeOfDay time) {
+    final minutes = _timeToMinutes(time);
+    return minutes >= _earliestAllowedMinutes &&
+        minutes <= _latestAllowedMinutes;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -346,6 +362,82 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
     return dt.toIso8601String();
   }
 
+  // ── Start time picker with window validation ──────────────────────────
+  Future<void> _pickStartTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _startTime ?? const TimeOfDay(hour: 9, minute: 0),
+    );
+    if (time == null) return;
+
+    if (!_isWithinAllowedWindow(time)) {
+      CenterToast.show(
+        context,
+        message: 'Start time must be between 7:00 AM and 10:00 PM.',
+        icon: Icons.error_outline,
+        color: Colors.red,
+      );
+      return;
+    }
+
+    setState(() {
+      _startTime = time;
+      _startTimeController.text = _buildTimeLabel(time);
+      _errorMessage = null;
+    });
+
+    // If an end time is already picked, make sure the duration still holds.
+    if (_endTime != null) {
+      final duration = _timeToMinutes(_endTime!) - _timeToMinutes(_startTime!);
+      if (duration < _minDurationMinutes) {
+        CenterToast.show(
+          context,
+          message: 'Study session must be at least 1 hour long.',
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+      }
+    }
+  }
+
+  // ── End time picker with window & minimum-duration validation ─────────
+  Future<void> _pickEndTime() async {
+    final time = await showTimePicker(
+      context: context,
+      initialTime: _endTime ?? const TimeOfDay(hour: 10, minute: 0),
+    );
+    if (time == null) return;
+
+    if (!_isWithinAllowedWindow(time)) {
+      CenterToast.show(
+        context,
+        message: 'End time must be between 7:00 AM and 10:00 PM.',
+        icon: Icons.error_outline,
+        color: Colors.red,
+      );
+      return;
+    }
+
+    if (_startTime != null) {
+      final duration = _timeToMinutes(time) - _timeToMinutes(_startTime!);
+      if (duration < _minDurationMinutes) {
+        CenterToast.show(
+          context,
+          message: 'Study session must be at least 1 hour long.',
+          icon: Icons.error_outline,
+          color: Colors.red,
+        );
+        return;
+      }
+    }
+
+    setState(() {
+      _endTime = time;
+      _endTimeController.text = _buildTimeLabel(time);
+      _errorMessage = null;
+    });
+  }
+
   bool _validate() {
     if (_courseCodeController.text.trim().isEmpty) {
       _errorMessage = 'Course code is required.';
@@ -361,6 +453,18 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
     }
     if (_startTime == null || _endTime == null) {
       _errorMessage = 'Start time and end time are required.';
+      return false;
+    }
+    if (!_isWithinAllowedWindow(_startTime!) ||
+        !_isWithinAllowedWindow(_endTime!)) {
+      _errorMessage =
+          'Sessions must be scheduled between 7:00 AM and 10:00 PM.';
+      return false;
+    }
+    final durationMinutes =
+        _timeToMinutes(_endTime!) - _timeToMinutes(_startTime!);
+    if (durationMinutes < _minDurationMinutes) {
+      _errorMessage = 'Study session must be at least 1 hour long.';
       return false;
     }
     if (_recurrenceType == 'NONE') {
@@ -396,6 +500,9 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       setState(() {});
       return;
     }
+
+    LoadingOverlay.show(context);
+
     try {
       final courseCode = _courseCodeController.text.trim();
       final courseName = _courseNameController.text.trim();
@@ -444,8 +551,10 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       }
 
       // ── Step 3: Check for schedule overlap ───────────────────────────
+      LoadingOverlay.hide();
       final shouldProceed = await _checkOverlapAndConfirm();
       if (!shouldProceed) return;
+      LoadingOverlay.show(context);
 
       // ── Step 4: Create or edit schedule ──────────────────────────────
       DateTime baseDate;
@@ -494,6 +603,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       }
 
       debugPrint(message);
+      LoadingOverlay.hide();
       CenterToast.show(
         context,
         message: _isEditing
@@ -1158,6 +1268,35 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
             ),
             const SizedBox(height: 12),
 
+            // Time window hint
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: AppColors.primary.withOpacity(0.06),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    size: 16,
+                    color: AppColors.primary.withOpacity(0.8),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Sessions must be between 7:00 AM – 10:00 PM and at least 1 hour long.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.primary.withOpacity(0.8),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
             // Start and End Time
             Row(
               children: [
@@ -1175,20 +1314,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                       ),
                       const SizedBox(height: 6),
                       GestureDetector(
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime:
-                                _startTime ??
-                                const TimeOfDay(hour: 9, minute: 0),
-                          );
-                          if (time != null) {
-                            setState(() {
-                              _startTime = time;
-                              _startTimeController.text = _buildTimeLabel(time);
-                            });
-                          }
-                        },
+                        onTap: _pickStartTime,
                         child: _buildBorderedTimeDisplay(
                           label: _startTime != null
                               ? _buildTimeLabel(_startTime!)
@@ -1213,20 +1339,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                       ),
                       const SizedBox(height: 6),
                       GestureDetector(
-                        onTap: () async {
-                          final time = await showTimePicker(
-                            context: context,
-                            initialTime:
-                                _endTime ??
-                                const TimeOfDay(hour: 10, minute: 0),
-                          );
-                          if (time != null) {
-                            setState(() {
-                              _endTime = time;
-                              _endTimeController.text = _buildTimeLabel(time);
-                            });
-                          }
-                        },
+                        onTap: _pickEndTime,
                         child: _buildBorderedTimeDisplay(
                           label: _endTime != null
                               ? _buildTimeLabel(_endTime!)

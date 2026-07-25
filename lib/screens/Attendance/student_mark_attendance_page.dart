@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:provider/provider.dart';
 import '../../models/attendance_session_model.dart';
 import '../../providers/attendance_provider.dart';
@@ -6,6 +7,7 @@ import '../../providers/course_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../widgets/floating_line_background.dart';
 import '../../widgets/center_toast.dart';
+import '../../widgets/selected_card.dart';
 import '../../modals/attendance_modal_password.dart';
 
 class StudentMarkAttendancePage extends StatefulWidget {
@@ -414,48 +416,41 @@ class _StudentMarkAttendancePageState extends State<StudentMarkAttendancePage> {
   }
 
   Widget _emptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(
-            Icons.event_busy_outlined,
-            size: 64,
-            color: Colors.grey.shade300,
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(height: 40),
+        Icon(Icons.event_busy_outlined, size: 64, color: Colors.grey.shade300),
+        const SizedBox(height: 16),
+        Text(
+          'No sessions available',
+          style: TextStyle(
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+            color: Colors.grey.shade500,
           ),
-          const SizedBox(height: 16),
-          Text(
-            'No sessions available',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade500,
-            ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Active sessions from your enrolled\ncourses will appear here.',
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+        TextButton.icon(
+          onPressed: _loadActiveSessions,
+          icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E6B2D)),
+          label: const Text(
+            'Refresh',
+            style: TextStyle(color: Color(0xFF1E6B2D)),
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Active sessions from your enrolled\ncourses will appear here.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          TextButton.icon(
-            onPressed: _loadActiveSessions,
-            icon: const Icon(Icons.refresh_rounded, color: Color(0xFF1E6B2D)),
-            label: const Text(
-              'Refresh',
-              style: TextStyle(color: Color(0xFF1E6B2D)),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
   Widget _buildContent() {
     final hasAnything = activeSessions.isNotEmpty || pastSessions.isNotEmpty;
-
-    if (!hasAnything) return _emptyState();
 
     return RefreshIndicator(
       onRefresh: _loadActiveSessions,
@@ -463,19 +458,36 @@ class _StudentMarkAttendancePageState extends State<StudentMarkAttendancePage> {
       child: ListView(
         padding: const EdgeInsets.fromLTRB(16, 20, 16, 32),
         children: [
-          // ── Active Sessions ──────────────────────────────────────────
-          if (activeSessions.isNotEmpty) ...[
-            _sectionHeader('Active Sessions'),
-            ...activeSessions.map(
-              (s) => _sessionCard(s, isActiveSection: true),
-            ),
-            const SizedBox(height: 8),
-          ],
+          // ── My Attendance ────────────────────────────────────────────
+          SelectedCard(
+            icon: Icons.history_edu_outlined,
+            iconColor: Colors.blue,
+            title: 'My Attendance',
+            subtitle: 'View your attendance history and records',
+            onTap: () => context.push('/attendance/student'),
+          ),
+          const SizedBox(height: 20),
 
-          // ── Past Sessions ────────────────────────────────────────────
-          if (pastSessions.isNotEmpty) ...[
-            _sectionHeader('Past Sessions'),
-            ...pastSessions.map((s) => _sessionCard(s, isActiveSection: false)),
+          // ── Sessions content ─────────────────────────────────────────
+          if (!hasAnything)
+            _emptyState()
+          else ...[
+            // ── Active Sessions ──────────────────────────────────────
+            if (activeSessions.isNotEmpty) ...[
+              _sectionHeader('Active Sessions'),
+              ...activeSessions.map(
+                (s) => _sessionCard(s, isActiveSection: true),
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            // ── Past Sessions ────────────────────────────────────────
+            if (pastSessions.isNotEmpty) ...[
+              _sectionHeader('Past Sessions'),
+              ...pastSessions.map(
+                (s) => _sessionCard(s, isActiveSection: false),
+              ),
+            ],
           ],
         ],
       ),

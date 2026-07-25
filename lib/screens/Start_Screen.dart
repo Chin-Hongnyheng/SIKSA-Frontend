@@ -2,9 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:lottie/lottie.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
 
 import '../widgets/button.dart';
 import '../widgets/logo.dart';
+import '../providers/notification_provider.dart';
+import '../service/notification_service.dart';
 
 class StartScreen extends StatefulWidget {
   const StartScreen({super.key});
@@ -16,17 +19,21 @@ class StartScreen extends StatefulWidget {
 class _StartScreenState extends State<StartScreen> {
   final PageController _controller = PageController();
 
+  // ADD this method
+  Future<void> _handleGetStarted() async {
+    await NotificationService.requestPermission(
+      context.read<NotificationProvider>(),
+    );
+    if (mounted) context.go('/auth');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: Column(
         children: [
           const SizedBox(height: 130),
-
-          /// LOGO
           const Center(child: LogoApp()),
-
-          /// PAGE VIEW
           Flexible(
             child: PageView(
               controller: _controller,
@@ -49,8 +56,6 @@ class _StartScreenState extends State<StartScreen> {
               ],
             ),
           ),
-
-          /// DOT INDICATOR
           SmoothPageIndicator(
             controller: _controller,
             count: 3,
@@ -61,20 +66,12 @@ class _StartScreenState extends State<StartScreen> {
               activeDotColor: Color(0xFF1E6B2D),
             ),
           ),
-
           const SizedBox(height: 70),
-
-          /// BUTTON
           AppButton(
             text: "Get Started",
-            onPressed: () {
-              context.go('/auth');
-            },
+            onPressed: _handleGetStarted, // CHANGED from context.go('/auth')
           ),
-
           const SizedBox(height: 30),
-
-          /// TERMS TEXT
           const Padding(
             padding: EdgeInsets.symmetric(horizontal: 24),
             child: Text.rich(
@@ -110,7 +107,6 @@ class _StartScreenState extends State<StartScreen> {
               textAlign: TextAlign.center,
             ),
           ),
-
           const SizedBox(height: 30),
         ],
       ),

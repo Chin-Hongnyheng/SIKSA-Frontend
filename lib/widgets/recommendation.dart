@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import '../core/theme/app_colors.dart';
@@ -20,10 +21,10 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
   bool _userPaused = false;
   int _lastCourseCount = 0;
 
-  // Tracks which single card (by its virtual page index) is currently
-  // showing its "open" overlay. Only one card can be open at a time —
-  // opening another card automatically closes whichever was open before.
-  int? _openVirtualPage;
+  // Which course (by real index, not virtual page) currently has its
+  // Subscribe overlay open. Only one card can be active at a time —
+  // tapping a different card closes whichever one was open before.
+  int? _activeRealIndex;
 
   // Large multiplier so virtual list feels infinite in both directions
   static const int _mult = 500;
@@ -41,7 +42,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
     final initialPage = (count * _mult) ~/ 2;
     _pageCtrl = PageController(
       initialPage: initialPage,
-      viewportFraction: 0.88,
+      viewportFraction: 0.86,
     );
     _lastCourseCount = count;
     // kick off auto-play once
@@ -65,20 +66,10 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
   }
 
   void _onPageChanged(int virtualPage, int count) {
-    setState(() => _realIndex = virtualPage % count);
-  }
-
-  // Opens [virtualPage]'s overlay, closing whatever was open before it.
-  // Tapping the already-open card closes it instead.
-  void _toggleOpen(int virtualPage) {
     setState(() {
-      if (_openVirtualPage == virtualPage) {
-        _openVirtualPage = null;
-        _userPaused = false;
-      } else {
-        _openVirtualPage = virtualPage;
-        _userPaused = true;
-      }
+      _realIndex = virtualPage % count;
+      // Close any open Subscribe overlay when the user swipes away.
+      _activeRealIndex = null;
     });
   }
 
@@ -98,12 +89,19 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
     });
   }
 
+  void _toggleActive(int realIdx) {
+    setState(() {
+      _activeRealIndex = _activeRealIndex == realIdx ? null : realIdx;
+    });
+  }
+
   Future<void> _subscribe(CourseModel course) async {
     try {
       await context.read<CourseProvider>().subscribeCourse(
         courseCode: course.courseCode,
       );
       if (!mounted) return;
+      setState(() => _activeRealIndex = null);
       await CenterToast.show(
         context,
         message: 'Subscribed to ${course.courseName}',
@@ -144,17 +142,29 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
         const SizedBox(height: 12),
 
         // Header
-        const Row(
+        Row(
           children: [
-            Icon(Icons.auto_awesome_outlined, color: Colors.white, size: 20),
-            SizedBox(width: 8),
-            Expanded(
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.14),
+                borderRadius: BorderRadius.circular(9),
+              ),
+              child: const Icon(
+                Icons.auto_awesome_outlined,
+                color: Colors.white,
+                size: 16,
+              ),
+            ),
+            const SizedBox(width: 10),
+            const Expanded(
               child: Text(
                 'Recommended for you',
                 style: TextStyle(
                   color: Colors.white,
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
+                  letterSpacing: 0.1,
                 ),
               ),
             ),
@@ -164,19 +174,20 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
 
         // Carousel — fully swipeable, infinite circular loop
         SizedBox(
-          height: 190,
+          height: 320,
           child: PageView.builder(
             controller: ctrl,
             itemCount: count * _mult,
             onPageChanged: (p) => _onPageChanged(p, count),
             itemBuilder: (context, virtualPage) {
-              final course = courses[virtualPage % count];
+              final realIdx = virtualPage % count;
+              final course = courses[realIdx];
               return Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 6),
                 child: _RecommendationCard(
                   course: course,
-                  isOpen: _openVirtualPage == virtualPage,
-                  onToggleOpen: () => _toggleOpen(virtualPage),
+                  isActive: _activeRealIndex == realIdx,
+                  onTap: () => _toggleActive(realIdx),
                   onSubscribe: () => _subscribe(course),
                 ),
               );
@@ -184,7 +195,7 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
           ),
         ),
 
-        const SizedBox(height: 10),
+        const SizedBox(height: 12),
 
         // Dots — tapping jumps to that course, swiping updates them too
         Row(
@@ -196,11 +207,25 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
               child: AnimatedContainer(
                 duration: const Duration(milliseconds: 250),
                 margin: const EdgeInsets.symmetric(horizontal: 3),
-                width: active ? 18 : 6,
+                width: active ? 20 : 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: active ? Colors.white : Colors.white.withOpacity(0.3),
+                  gradient: active
+                      ? const LinearGradient(
+                          colors: [Colors.white, Color(0xFFE4FFF0)],
+                        )
+                      : null,
+                  color: active ? null : Colors.white.withOpacity(0.28),
                   borderRadius: BorderRadius.circular(3),
+                  boxShadow: active
+                      ? [
+                          BoxShadow(
+                            color: Colors.white.withOpacity(0.4),
+                            blurRadius: 6,
+                            offset: const Offset(0, 1),
+                          ),
+                        ]
+                      : null,
                 ),
               ),
             );
@@ -214,210 +239,354 @@ class _RecommendationWidgetState extends State<RecommendationWidget> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Individual course card
+// Individual course card — same visual language as _CourseListCard on the
+// Courses screen (cover image, title, creator row, pill badges, footer
+// date row). There is no visible Subscribe button by default. Tapping the
+// card dims it with a dark scrim and reveals a centered Subscribe button;
+// tapping it again (or selecting another card) closes the overlay.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class _RecommendationCard extends StatelessWidget {
   const _RecommendationCard({
     required this.course,
-    required this.isOpen,
-    required this.onToggleOpen,
+    required this.isActive,
+    required this.onTap,
     required this.onSubscribe,
   });
 
   final CourseModel course;
-  final bool isOpen;
-  final VoidCallback onToggleOpen;
+  final bool isActive;
+  final VoidCallback onTap;
   final VoidCallback onSubscribe;
+
+  bool get _isPopular => course.subscriberCount >= 20;
 
   @override
   Widget build(BuildContext context) {
     final hasImg = course.courseImg != null && course.courseImg!.isNotEmpty;
 
-    return GestureDetector(
-      onTap: onToggleOpen,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ── Card ─────────────────────────────────────────────────
-          Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(14),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.08),
-                  blurRadius: 8,
-                  offset: const Offset(0, 3),
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(20),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        splashColor: AppColors.primary.withOpacity(0.06),
+        highlightColor: AppColors.primary.withOpacity(0.03),
+        child: Stack(
+          children: [
+            // ── Base card content ──────────────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [Colors.white, Color(0xFFFCFEFC)],
                 ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: const Color(0xFFECF1EE)),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.primary.withOpacity(0.10),
+                    blurRadius: 20,
+                    offset: const Offset(0, 9),
+                  ),
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.04),
+                    blurRadius: 6,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(10),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Cover image
-                  SizedBox(
-                    height: 110,
-                    width: double.infinity,
-                    child: hasImg
-                        ? Image.network(
-                            course.courseImg!,
-                            fit: BoxFit.cover,
-                            errorBuilder: (_, __, ___) => _imgPlaceholder(),
-                            loadingBuilder: (_, child, progress) {
-                              if (progress == null) return child;
-                              return Container(
-                                color: AppColors.primary.withOpacity(0.06),
-                                child: const Center(
-                                  child: CircularProgressIndicator(
-                                    color: AppColors.primary,
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                              );
-                            },
-                          )
-                        : _imgPlaceholder(),
-                  ),
-
-                  // Text — tight spacing
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(12, 7, 12, 7),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                  // ── Cover image ──────────────────────────────────────
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(14),
+                    child: Stack(
                       children: [
-                        Text(
-                          course.courseCode,
-                          style: const TextStyle(
-                            color: AppColors.primary,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        AspectRatio(
+                          aspectRatio: 16 / 9,
+                          child: hasImg
+                              ? Image.network(
+                                  course.courseImg!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  errorBuilder: (_, __, ___) =>
+                                      _imgPlaceholder(),
+                                  loadingBuilder: (_, child, progress) {
+                                    if (progress == null) return child;
+                                    return Container(
+                                      color: AppColors.primary.withOpacity(
+                                        0.06,
+                                      ),
+                                      child: const Center(
+                                        child: CircularProgressIndicator(
+                                          color: AppColors.primary,
+                                          strokeWidth: 2,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                )
+                              : _imgPlaceholder(),
                         ),
-                        const SizedBox(height: 2),
-                        Text(
-                          course.courseName,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF1B3B22),
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            height: 1.2,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        // ── Creator + student count row ─────────────
-                        Row(
-                          children: [
-                            const Icon(
-                              Icons.person_outline_rounded,
-                              size: 12,
-                              color: Color(0xFF718096),
+                        Positioned(
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          height: 30,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                begin: Alignment.bottomCenter,
+                                end: Alignment.topCenter,
+                                colors: [
+                                  Colors.black.withOpacity(0.16),
+                                  Colors.transparent,
+                                ],
+                              ),
                             ),
-                            const SizedBox(width: 3),
-                            Expanded(
-                              child: Text(
-                                course.createdBy ?? 'Unknown',
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  color: Color(0xFF718096),
-                                  fontSize: 11,
+                          ),
+                        ),
+                        if (_isPopular)
+                          Positioned(
+                            top: 7,
+                            left: 7,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                gradient: const LinearGradient(
+                                  colors: [
+                                    Color(0xFF34D399),
+                                    Color(0xFF10B981),
+                                  ],
                                 ),
+                                borderRadius: BorderRadius.circular(7),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(
+                                      0xFF10B981,
+                                    ).withOpacity(0.4),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: const Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.local_fire_department_rounded,
+                                    size: 11,
+                                    color: Colors.white,
+                                  ),
+                                  SizedBox(width: 2),
+                                  Text(
+                                    'Popular',
+                                    style: TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
-                            const SizedBox(width: 6),
-                            const Icon(
-                              Icons.groups_outlined,
-                              size: 12,
-                              color: Color(0xFF718096),
-                            ),
-                            const SizedBox(width: 3),
-                            Text(
-                              '${course.subscriberCount}',
-                              style: const TextStyle(
-                                color: Color(0xFF718096),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
+                          ),
                       ],
                     ),
+                  ),
+
+                  const SizedBox(height: 8),
+
+                  // ── Title ────────────────────────────────────────────
+                  Text(
+                    course.courseName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Color(0xFF16281B),
+                      fontSize: 15.5,
+                      fontWeight: FontWeight.w800,
+                      height: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+
+                  // ── Instructor ───────────────────────────────────────
+                  Row(
+                    children: [
+                      const Icon(
+                        Icons.person_outline_rounded,
+                        size: 13,
+                        color: Color(0xFF9AA5A0),
+                      ),
+                      const SizedBox(width: 4),
+                      Expanded(
+                        child: Text(
+                          course.createdBy ?? 'Unknown',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF718096),
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 7),
+
+                  // ── Badge row ────────────────────────────────────────
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      _OutlinedPill(
+                        icon: Icons.groups_outlined,
+                        label: '${course.subscriberCount} students',
+                      ),
+                      _OutlinedPill(
+                        icon: Icons.tag_rounded,
+                        label: course.courseCode,
+                      ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 8),
+                  const Divider(height: 1, color: Color(0xFFF0F3F1)),
+                  const SizedBox(height: 8),
+
+                  // ── Footer: date only, no button ─────────────────────
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.schedule_rounded,
+                        size: 13,
+                        color: const Color(0xFF9AA5A0),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        _formatDate(course.createdAt),
+                        style: const TextStyle(
+                          color: Color(0xFF9AA5A0),
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
             ),
-          ),
 
-          // ── Tap overlay — only one card shows this at a time ──────
-          AnimatedOpacity(
-            opacity: isOpen ? 1.0 : 0.0,
-            duration: const Duration(milliseconds: 200),
-            child: IgnorePointer(
-              ignoring: !isOpen,
-              child: Container(
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      child: Text(
-                        course.courseName,
-                        textAlign: TextAlign.center,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                          height: 1.35,
-                        ),
+            // ── Dark scrim + centered Subscribe, shown when active ────
+            IgnorePointer(
+              ignoring: !isActive,
+              child: AnimatedOpacity(
+                opacity: isActive ? 1 : 0,
+                duration: const Duration(milliseconds: 200),
+                child: Container(
+                  color: Colors.black.withOpacity(0.55),
+                  alignment: Alignment.center,
+                  child: ElevatedButton.icon(
+                    onPressed: onSubscribe,
+                    icon: const Icon(Icons.add_circle_outline, size: 17),
+                    label: const Text('Subscribe'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 22,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      textStyle: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 14),
-                    ElevatedButton.icon(
-                      onPressed: onSubscribe,
-                      icon: const Icon(Icons.add_circle_outline, size: 16),
-                      label: const Text('Join'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        foregroundColor: AppColors.primary,
-                        elevation: 0,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 10,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        textStyle: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _imgPlaceholder() => Container(
+    width: double.infinity,
+    decoration: BoxDecoration(
+      gradient: LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          AppColors.primary.withOpacity(0.85),
+          AppColors.primary.withOpacity(0.5),
+        ],
+      ),
+    ),
+    child: Center(
+      child: Icon(
+        Icons.menu_book_rounded,
+        color: Colors.white.withOpacity(0.9),
+        size: 32,
+      ),
+    ),
+  );
+}
+
+// ── Generic outlined pill (matches _OutlinedPill on the Courses screen) ──
+
+class _OutlinedPill extends StatelessWidget {
+  const _OutlinedPill({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF7F9F7),
+        borderRadius: BorderRadius.circular(7),
+        border: Border.all(color: const Color(0xFFE7EBE8)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 12, color: const Color(0xFF4A5568)),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              color: Color(0xFF4A5568),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
       ),
     );
   }
+}
 
-  Widget _imgPlaceholder() => Container(
-    color: AppColors.primary.withOpacity(0.07),
-    child: const Center(
-      child: Icon(Icons.menu_book_outlined, color: AppColors.primary, size: 36),
-    ),
-  );
+// ── Date helper (mirrors _formatDate in courses_screen.dart) ─────────────
+
+String _formatDate(String? value) {
+  if (value == null || value.isEmpty) return 'No date';
+  final parsed = DateTime.tryParse(value);
+  if (parsed == null) return value;
+  return DateFormat('MMM d, yyyy').format(parsed.toLocal());
 }

@@ -68,17 +68,6 @@ class AttendanceScreen extends StatelessWidget {
                           'Mark your own attendance for an active session',
                       onTap: () => context.push('/attendance/mark'),
                     ),
-
-                    const SizedBox(height: 14),
-
-                    // ── My Attendance ────────────────────────────────────
-                    SelectedCard(
-                      icon: Icons.history_edu_outlined,
-                      iconColor: Colors.blue,
-                      title: 'My Attendance',
-                      subtitle: 'View your attendance history and records',
-                      onTap: () => context.push('/attendance/student'),
-                    ),
                   ],
                 ),
               ),
