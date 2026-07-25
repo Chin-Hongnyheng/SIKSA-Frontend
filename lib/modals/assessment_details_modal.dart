@@ -57,10 +57,8 @@ class AssessmentDetailsModal extends StatelessWidget {
     final title = assessment.assessmentName.trim();
     final courseCode = assessment.courseCode.trim();
     final guide = assessment.guide?.trim();
-    final createdAt = DateTime.tryParse(assessment.createdAt ?? '');
-    final dateLabel = createdAt == null
-        ? '--'
-        : DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
+    final createdAt = assessment.createdAt;
+    final dateLabel = DateFormat('MMMM d, yyyy').format(createdAt.toLocal());
 
     final accentColor = assessmentColorFromHex(assessment.color);
     final iconData = assessmentIconFromKey(assessment.icon);

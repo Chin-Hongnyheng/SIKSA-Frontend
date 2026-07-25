@@ -2,6 +2,9 @@ import 'dart:async';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:file_picker/file_picker.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:graphql_flutter/graphql_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../core/utils/api_helper.dart';
@@ -46,6 +49,7 @@ class CourseService {
           subscriberCount
           isSubscribed
           courseImg
+          colorHex
           subscribers {
             id
             userName
@@ -78,6 +82,7 @@ class CourseService {
           subscriberCount
           isSubscribed
           courseImg
+          colorHex
           subscribers {
             id
             userName
@@ -110,6 +115,7 @@ class CourseService {
           subscriberCount
           isSubscribed
           courseImg
+          colorHex
           subscribers {
             id
             userName
@@ -134,6 +140,7 @@ class CourseService {
     required String courseName,
     required String courseCode,
     String? description,
+    String? colorHex,
   }) async {
     final authClient = _authClient();
 
@@ -153,6 +160,7 @@ class CourseService {
             "courseName": courseName,
             "courseCode": courseCode,
             "description": description,
+            "colorHex": colorHex,
           },
         },
       ),
@@ -170,6 +178,7 @@ class CourseService {
     String? courseName,
     String? newCourseCode,
     String? description,
+    String? colorHex,
   }) async {
     final authClient = _authClient();
 
@@ -190,6 +199,7 @@ class CourseService {
             "courseName": courseName,
             "newCourseCode": newCourseCode,
             "description": description,
+            "colorHex": colorHex,
           },
         },
       ),
@@ -298,7 +308,7 @@ class CourseService {
 
   Future<String> uploadCourseImage({
     required String courseCode,
-    required File imageFile,
+    required XFile imageFile,
   }) async {
     final uri = Uri.parse(
       '${dotenv.env['BASE_URL']}/courses/$courseCode/image',
@@ -306,16 +316,68 @@ class CourseService {
 
     final request = http.MultipartRequest('PATCH', uri)
       ..headers['Authorization'] = 'Bearer ${AuthProvider.accessToken}'
-      ..files.add(await http.MultipartFile.fromPath('image', imageFile.path));
+      ..files.add(http.MultipartFile.fromBytes(
+        'image',
+        await imageFile.readAsBytes(),
+        filename: imageFile.name,
+      ));
 
     final response = await request.send();
     final body = await response.stream.bytesToString();
+    
+    if (body.isEmpty) {
+      throw Exception('Server returned an empty response with status ${response.statusCode}');
+    }
+
     final json = jsonDecode(body);
 
     if (response.statusCode != 200) {
-      throw Exception(json['message'] ?? 'Upload failed');
+      throw Exception(json['message'] ?? 'Upload failed with status ${response.statusCode}');
     }
 
-    return json['course_img'];
+    return json['course_img'] ?? '';
+  }
+
+  Future<Map<String, dynamic>> uploadCourseMaterial({
+    required String courseCode,
+    required PlatformFile file,
+  }) async {
+    final uri = Uri.parse(
+      "\${dotenv.env['BASE_URL']}/courses/$courseCode/materials",
+    );
+
+    final request = http.MultipartRequest('PATCH', uri)
+      ..headers['Authorization'] = 'Bearer \${AuthProvider.accessToken}';
+
+    if (kIsWeb) {
+      if (file.bytes == null) {
+        throw Exception('File bytes are null on web');
+      }
+      request.files.add(http.MultipartFile.fromBytes(
+        'file',
+        file.bytes!,
+        filename: file.name,
+      ));
+    } else {
+      if (file.path == null) {
+        throw Exception('File path is null');
+      }
+      request.files.add(await http.MultipartFile.fromPath('file', file.path!));
+    }
+
+    final response = await request.send();
+    final body = await response.stream.bytesToString();
+    
+    if (body.isEmpty) {
+      throw Exception('Server returned an empty response with status ${response.statusCode}');
+    }
+
+    final json = jsonDecode(body);
+
+    if (response.statusCode != 200) {
+      throw Exception(json['message'] ?? 'Upload failed with status ${response.statusCode}');
+    }
+
+    return json['course'] ?? {};
   }
 }

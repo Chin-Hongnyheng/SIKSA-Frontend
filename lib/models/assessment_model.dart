@@ -5,8 +5,9 @@ class AssessmentModel {
   final String? icon;
   final String? color;
   final String? imageBase64;
-  final String? createdBy;
-  final String? createdAt;
+  final bool isHidden;
+  final String createdBy;
+  final DateTime createdAt;
 
   AssessmentModel({
     required this.assessmentName,
@@ -15,20 +16,36 @@ class AssessmentModel {
     this.icon,
     this.color,
     this.imageBase64,
-    this.createdAt,
-    this.createdBy,
+    this.isHidden = false,
+    required this.createdBy,
+    required this.createdAt,
   });
 
   factory AssessmentModel.fromMap(Map<String, dynamic> map) {
     return AssessmentModel(
-      assessmentName: map['assessmentName']?.toString() ?? '',
-      courseCode: map['courseCode']?.toString() ?? '',
-      guide: map['guide']?.toString(),
-      icon: map['icon']?.toString(),
-      color: map['color']?.toString(),
-      imageBase64: map['imageBase64']?.toString(),
-      createdAt: map['createdAt']?.toString(),
-      createdBy: map['createdBy']?.toString(),
+      assessmentName: map['assessmentName'] ?? '',
+      courseCode: map['courseCode'] ?? '',
+      guide: map['guide'],
+      icon: map['icon'],
+      color: map['color'],
+      imageBase64: map['imageBase64'],
+      isHidden: map['isHidden'] ?? false,
+      createdBy: map['createdBy'] ?? '',
+      createdAt: DateTime.tryParse(map['createdAt'] ?? '') ?? DateTime.now(),
     );
+  }
+
+  Map<String, dynamic> toMap() {
+    return {
+      'assessmentName': assessmentName,
+      'courseCode': courseCode,
+      'guide': guide,
+      'icon': icon,
+      'color': color,
+      'imageBase64': imageBase64,
+      'isHidden': isHidden,
+      'createdBy': createdBy,
+      'createdAt': createdAt.toIso8601String(),
+    };
   }
 }

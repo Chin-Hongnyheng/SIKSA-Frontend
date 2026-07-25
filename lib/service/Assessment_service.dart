@@ -315,4 +315,35 @@ class AssessmentService {
       throw _exceptionFromResult(result);
     }
   }
+
+  Future<void> toggleAssessmentVisibility({
+    required String courseCode,
+    required String assessmentName,
+    required bool isHidden,
+  }) async {
+    final authClient = _authClient();
+
+    const String mutation = '''
+      mutation ToggleAssessmentVisibility(\$courseCode: String!, \$assessmentName: String!, \$isHidden: Boolean!) {
+        toggleAssessmentVisibility(courseCode: \$courseCode, assessmentName: \$assessmentName, isHidden: \$isHidden) {
+          message
+        }
+      }
+    ''';
+
+    final result = await authClient.mutate(
+      MutationOptions(
+        document: gql(mutation),
+        variables: {
+          'courseCode': courseCode,
+          'assessmentName': assessmentName,
+          'isHidden': isHidden,
+        },
+      ),
+    );
+
+    if (result.hasException) {
+      throw _exceptionFromResult(result);
+    }
+  }
 }

@@ -1,10 +1,12 @@
 import 'dart:io';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../widgets/button.dart';
 import '../core/theme/app_colors.dart';
 import '../service/schedule_service.dart';
 import '../service/course_service.dart';
+import 'package:file_picker/file_picker.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/loading.dart';
 
@@ -12,7 +14,7 @@ Future<void> showCreateScheduleModal(
   BuildContext context, {
   required void Function(Map<String, dynamic> schedule) onSubmit,
   Map<String, dynamic>? initialData,
-  String title = 'Create Schedule',
+  String title = 'Create Course',
   String? scheduleId,
 }) async {
   await showDialog(
@@ -67,8 +69,11 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
   final CourseService _courseService = CourseService();
 
   // Image picker
-  File? _selectedCourseImage;
+  XFile? _selectedCourseImage;
   final ImagePicker _imagePicker = ImagePicker();
+
+  // Materials picker
+  List<PlatformFile> _selectedMaterials = [];
 
   String _recurrenceType = 'NONE';
   DateTime? _date;
@@ -104,6 +109,24 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       if (_endTimeController.text.isNotEmpty) {
         _endTime = _parseTime(_endTimeController.text);
       }
+
+      final initialColorHex = widget.initialData!['colorHex'] as String?;
+      if (initialColorHex != null && initialColorHex.isNotEmpty) {
+        final color = _colorFromHex(initialColorHex);
+        if (color != null) {
+          _selectedColor = color;
+        }
+      }
+    }
+  }
+
+  Color? _colorFromHex(String hexColor) {
+    hexColor = hexColor.replaceAll('#', '');
+    if (hexColor.length == 6) hexColor = 'FF\$hexColor';
+    try {
+      return Color(int.parse(hexColor, radix: 16));
+    } catch (_) {
+      return null;
     }
   }
 
@@ -152,7 +175,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
       source: ImageSource.gallery,
     );
     if (image != null) {
-      setState(() => _selectedCourseImage = File(image.path));
+      setState(() => _selectedCourseImage = image);
     }
   }
 
@@ -385,12 +408,14 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
           courseName: courseName,
           newCourseCode: courseCode,
           description: description.isNotEmpty ? description : null,
+          colorHex: '#\${_selectedColor.value.toRadixString(16).substring(2)}',
         );
       } else {
         await _courseService.createCourse(
           courseCode: courseCode,
           courseName: courseName,
           description: description.isNotEmpty ? description : null,
+          colorHex: '#\${_selectedColor.value.toRadixString(16).substring(2)}',
         );
       }
 
@@ -403,6 +428,18 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
           );
         } catch (e) {
           debugPrint('Course image upload failed: $e');
+        }
+      }
+
+      // ── Step 2.5: Upload course materials if selected ─────────────────
+      for (final material in _selectedMaterials) {
+        try {
+          await _courseService.uploadCourseMaterial(
+            courseCode: courseCode,
+            file: material,
+          );
+        } catch (e) {
+          debugPrint('Course material upload failed: $e');
         }
       }
 
@@ -666,12 +703,19 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.file(
-                          _selectedCourseImage!,
-                          width: double.infinity,
-                          height: 140,
-                          fit: BoxFit.cover,
-                        ),
+                        child: kIsWeb
+                            ? Image.network(
+                                _selectedCourseImage!.path,
+                                width: double.infinity,
+                                height: 140,
+                                fit: BoxFit.cover,
+                              )
+                            : Image.file(
+                                File(_selectedCourseImage!.path),
+                                width: double.infinity,
+                                height: 140,
+                                fit: BoxFit.cover,
+                              ),
                       ),
                       // Change photo button overlay
                       Positioned(
@@ -724,6 +768,84 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
                   ),
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildCourseMaterialsPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text(
+              'Course Materials (optional)',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: AppColors.darkText,
+              ),
+            ),
+            TextButton.icon(
+              onPressed: () async {
+                try {
+                  FilePickerResult? result = await FilePicker.pickFiles(
+                    type: FileType.custom,
+                    allowedExtensions: ['pdf', 'doc', 'docx', 'txt', 'zip', 'ppt', 'pptx', 'xls', 'xlsx'],
+                    allowMultiple: true,
+                    withData: true,
+                  );
+                  if (result != null) {
+                    setState(() {
+                      _selectedMaterials.addAll(result.files);
+                    });
+                  }
+                } catch (e) {
+                  debugPrint('Failed to pick materials: $e');
+                }
+              },
+              icon: const Icon(Icons.upload_file, size: 16),
+              label: const Text('Add Files'),
+            ),
+          ],
+        ),
+        if (_selectedMaterials.isNotEmpty) ...[
+          const SizedBox(height: 8),
+          ..._selectedMaterials.map((file) => Padding(
+                padding: const EdgeInsets.only(bottom: 6.0),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.grey.shade300),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.picture_as_pdf, size: 20, color: AppColors.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          file.name,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () {
+                          setState(() {
+                            _selectedMaterials.remove(file);
+                          });
+                        },
+                        child: const Icon(Icons.close, size: 18, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ),
+              )),
+        ],
       ],
     );
   }
@@ -1017,6 +1139,10 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
             // ── COURSE IMAGE PICKER ──────────────────────────────────────
             _buildCourseImagePicker(),
+            const SizedBox(height: 16),
+
+            // ── COURSE MATERIALS PICKER ──────────────────────────────────
+            _buildCourseMaterialsPicker(),
             const SizedBox(height: 20),
 
             // ── SCHEDULE SECTION ─────────────────────────────────────────
@@ -1260,7 +1386,7 @@ class _CreateScheduleDialogState extends State<_CreateScheduleDialog> {
 
             const SizedBox(height: 24),
             AppButton(
-              text: _isEditing ? 'Edit Course' : 'Save Schedule',
+              text: _isEditing ? 'Edit Course' : 'Save Course',
               onPressed: _submit,
             ),
             const SizedBox(height: 12),

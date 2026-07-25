@@ -1,4 +1,6 @@
 import 'dart:io';
+import 'package:image_picker/image_picker.dart';
+import 'package:file_picker/file_picker.dart';
 
 import 'package:flutter/material.dart';
 import '../models/course_model.dart';
@@ -145,7 +147,7 @@ class CourseProvider extends ChangeNotifier {
 
   Future<String> uploadCourseImage({
     required String courseCode,
-    required File imageFile,
+    required XFile imageFile,
   }) async {
     final imageUrl = await _courseService.uploadCourseImage(
       courseCode: courseCode,
@@ -154,5 +156,17 @@ class CourseProvider extends ChangeNotifier {
     await loadCourses();
     await loadAllCourses();
     return imageUrl;
+  }
+
+  Future<void> uploadCourseMaterial({
+    required String courseCode,
+    required PlatformFile file,
+  }) async {
+    await _courseService.uploadCourseMaterial(
+      courseCode: courseCode,
+      file: file,
+    );
+    await loadCourses();
+    await loadAllCourses();
   }
 }

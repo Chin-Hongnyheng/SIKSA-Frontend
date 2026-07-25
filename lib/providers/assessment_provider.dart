@@ -57,6 +57,43 @@ class AssessmentProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> toggleAssessmentVisibility({
+    required String courseCode,
+    required String assessmentName,
+    required bool isHidden,
+  }) async {
+    isLoading = true;
+    error = null;
+    notifyListeners();
+    try {
+      await _assessmentService.toggleAssessmentVisibility(
+        courseCode: courseCode,
+        assessmentName: assessmentName,
+        isHidden: isHidden,
+      );
+      final index = _assessments.indexWhere((a) => a.assessmentName == assessmentName);
+      if (index != -1) {
+        final current = _assessments[index];
+        _assessments[index] = AssessmentModel(
+          assessmentName: current.assessmentName,
+          courseCode: current.courseCode,
+          guide: current.guide,
+          icon: current.icon,
+          color: current.color,
+          imageBase64: current.imageBase64,
+          isHidden: isHidden,
+          createdBy: current.createdBy,
+          createdAt: current.createdAt,
+        );
+      }
+    } catch (e) {
+      error = e.toString();
+    } finally {
+      isLoading = false;
+      notifyListeners();
+    }
+  }
+
   // ── All assessments ──
 
   List<AssessmentModel> _allAssessments = [];

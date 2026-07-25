@@ -104,7 +104,12 @@ final GoRouter router = GoRouter(
     GoRoute(path: '/schedule', builder: (context, state) => ScheduleScreen()),
     GoRoute(
       path: '/assessments',
-      builder: (context, state) => const AssessmentsScreen(),
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return AssessmentsScreen(
+          preselectedCourseCode: extra?['courseCode'] as String?,
+        );
+      },
     ),
     GoRoute(
       path: '/courses',
@@ -224,7 +229,12 @@ final GoRouter router = GoRouter(
     ),
     GoRoute(
       path: '/grading',
-      builder: (context, state) => const GradingScreen(),
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return GradingScreen(
+          preselectedCourseCode: extra?['courseCode'] as String?,
+        );
+      },
     ),
   ],
 );

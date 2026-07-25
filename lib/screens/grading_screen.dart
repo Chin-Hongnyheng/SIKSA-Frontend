@@ -16,7 +16,8 @@ import '../widgets/center_toast.dart';
 import '../widgets/loading.dart';
 
 class GradingScreen extends StatefulWidget {
-  const GradingScreen({super.key});
+  const GradingScreen({super.key, this.preselectedCourseCode});
+  final String? preselectedCourseCode;
 
   @override
   State<GradingScreen> createState() => _GradingScreenState();
@@ -72,10 +73,18 @@ class _GradingScreenState extends State<GradingScreen>
   Future<void> _loadInitialData() async {
     final courseProvider = context.read<CourseProvider>();
     await courseProvider.loadCourses();
-    if (courseProvider.courses.isNotEmpty) {
+    await courseProvider.loadAllCourses();
+    
+    if (widget.preselectedCourseCode != null) {
+      _selectedCourseCode = widget.preselectedCourseCode;
+    } else if (courseProvider.courses.isNotEmpty) {
       _selectedCourseCode = courseProvider.courses.first.courseCode;
+    }
+    
+    if (_selectedCourseCode != null) {
       await _loadCourseData();
     }
+    
     if (mounted) {
       setState(() => _isInitialLoading = false);
     }
@@ -207,6 +216,8 @@ class _GradingScreenState extends State<GradingScreen>
           ? aName.compareTo(bName)
           : bName.compareTo(aName);
     });
+    
+    final canManage = courses.any((c) => c.courseCode == _selectedCourseCode);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -217,7 +228,7 @@ class _GradingScreenState extends State<GradingScreen>
             // ── Header ──
             _GradingHeader(
               onBackTap: () => context.pop(),
-              onManageTap: assessments.isNotEmpty
+              onManageTap: (assessments.isNotEmpty && canManage)
                   ? () => _openManageColumnsSheet(context)
                   : null,
             ),
@@ -230,14 +241,23 @@ class _GradingScreenState extends State<GradingScreen>
                 ),
               )
             else ...[
-              _CourseSelector(
-                courses: courses,
-                selectedCode: _selectedCourseCode,
-                onChanged: (code) {
-                  setState(() => _selectedCourseCode = code);
-                  _loadCourseData();
-                },
-              ),
+              if (_selectedCourseCode != null)
+                _CourseSelector(
+                  courses: canManage
+                      ? courses
+                      : courseProvider.allCourses
+                          .where((c) => c.courseCode == _selectedCourseCode)
+                          .toList(),
+                  selectedCode: _selectedCourseCode,
+                  onChanged: canManage
+                      ? (code) {
+                          if (code != null && code != _selectedCourseCode) {
+                            setState(() => _selectedCourseCode = code);
+                            _loadCourseData();
+                          }
+                        }
+                      : null,
+                ),
 
               // ── Content ──
               Expanded(
@@ -264,6 +284,14 @@ class _GradingScreenState extends State<GradingScreen>
                         assessments: assessments,
                         students: subscribers,
                         sortAscending: _sortStudentAscending,
+                        canManage: canManage,
+                        onToggleVisibility: (assessmentName, currentIsHidden) {
+                          assessmentProvider.toggleAssessmentVisibility(
+                            courseCode: _selectedCourseCode!,
+                            assessmentName: assessmentName,
+                            isHidden: !currentIsHidden,
+                          );
+                        },
                         onSortToggle: () {
                           setState(() {
                             _sortStudentAscending = !_sortStudentAscending;
@@ -527,12 +555,12 @@ class _CourseSelector extends StatelessWidget {
   const _CourseSelector({
     required this.courses,
     required this.selectedCode,
-    required this.onChanged,
+    this.onChanged,
   });
 
   final List courses;
   final String? selectedCode;
-  final ValueChanged<String?> onChanged;
+  final ValueChanged<String?>? onChanged;
 
   @override
   Widget build(BuildContext context) {
@@ -689,12 +717,16 @@ class _GradingTable extends StatelessWidget {
     required this.bodyVerticalCtrl,
     required this.sortAscending,
     required this.onSortToggle,
+    required this.canManage,
+    required this.onToggleVisibility,
   });
 
   final List<AssessmentModel> assessments;
   final List students;
   final bool sortAscending;
   final VoidCallback onSortToggle;
+  final bool canManage;
+  final void Function(String assessmentName, bool currentIsHidden) onToggleVisibility;
   final Map<String, String> editedScores;
   final Map<String, String> originalScores;
   final void Function(String key, String value) onScoreChanged;
@@ -762,6 +794,10 @@ class _GradingTable extends StatelessWidget {
                             (assessment) => _HeaderCell(
                               text: assessment.assessmentName,
                               width: _cellWidth,
+                              isHidden: canManage ? assessment.isHidden : null,
+                              onToggleVisibility: canManage 
+                                  ? () => onToggleVisibility(assessment.assessmentName, assessment.isHidden)
+                                  : null,
                               onTap: () {
                                 showModalBottomSheet(
                                   context: context,
@@ -769,8 +805,7 @@ class _GradingTable extends StatelessWidget {
                                   backgroundColor: Colors.transparent,
                                   builder: (ctx) => AssessmentDetailsModal(
                                     assessment: assessment,
-                                    canManage:
-                                        false, // Don't allow delete/move from grading screen
+                                    canManage: false,
                                   ),
                                 );
                               },
@@ -840,11 +875,17 @@ class _GradingTable extends StatelessWidget {
                             children: assessments.map((assessment) {
                               final aName = assessment.assessmentName;
                               final key = '${student.id}|$aName';
-                              final currentVal = editedScores[key] ?? '';
+                              var currentVal = editedScores[key] ?? '';
                               final originalVal = originalScores[key] ?? '';
+                              
+                              if (!canManage && assessment.isHidden) {
+                                currentVal = 'Hidden';
+                              }
+
                               final isModified =
                                   currentVal != originalVal &&
-                                  currentVal.isNotEmpty;
+                                  currentVal.isNotEmpty &&
+                                  canManage;
 
                               return _ScoreCell(
                                 width: _cellWidth,
@@ -852,6 +893,7 @@ class _GradingTable extends StatelessWidget {
                                 value: currentVal,
                                 isModified: isModified,
                                 isEven: rowIndex.isEven,
+                                readOnly: !canManage,
                                 onChanged: (v) => onScoreChanged(key, v),
                               );
                             }).toList(),
@@ -926,6 +968,8 @@ class _HeaderCell extends StatelessWidget {
     this.isFirst = false,
     this.isNumberCol = false,
     this.sortIcon,
+    this.isHidden,
+    this.onToggleVisibility,
     this.onTap,
   });
 
@@ -934,6 +978,8 @@ class _HeaderCell extends StatelessWidget {
   final bool isFirst;
   final bool isNumberCol;
   final IconData? sortIcon;
+  final bool? isHidden;
+  final VoidCallback? onToggleVisibility;
   final VoidCallback? onTap;
 
   @override
@@ -981,6 +1027,17 @@ class _HeaderCell extends StatelessWidget {
               if (sortIcon != null) ...[
                 const SizedBox(width: 4),
                 Icon(sortIcon, size: 14, color: const Color(0xFF1B3B22)),
+              ],
+              if (isHidden != null) ...[
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: onToggleVisibility,
+                  child: Icon(
+                    isHidden! ? Icons.visibility_off : Icons.visibility,
+                    size: 16,
+                    color: isHidden! ? Colors.red : const Color(0xFF1B3B22),
+                  ),
+                ),
               ],
             ],
           ),
@@ -1080,6 +1137,7 @@ class _ScoreCell extends StatefulWidget {
     required this.isModified,
     required this.isEven,
     required this.onChanged,
+    this.readOnly = false,
   });
 
   final double width;
@@ -1087,6 +1145,7 @@ class _ScoreCell extends StatefulWidget {
   final String value;
   final bool isModified;
   final bool isEven;
+  final bool readOnly;
   final ValueChanged<String> onChanged;
 
   @override
@@ -1167,6 +1226,7 @@ class _ScoreCellState extends State<_ScoreCell> {
             ),
             isDense: true,
           ),
+          readOnly: widget.readOnly,
           onChanged: widget.onChanged,
         ),
       ),

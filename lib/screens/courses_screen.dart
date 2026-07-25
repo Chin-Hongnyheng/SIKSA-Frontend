@@ -2,6 +2,9 @@
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter_markdown/flutter_markdown.dart';
+import 'package:file_picker/file_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:frontend/modals/schedule_modal.dart';
 import 'package:frontend/providers/schedule_provider.dart';
 import 'package:go_router/go_router.dart';
@@ -12,6 +15,7 @@ import '../core/theme/app_colors.dart';
 import '../models/course_model.dart';
 import '../models/schedule_model.dart';
 import '../providers/course_provider.dart';
+import '../modals/create_assessment_modal.dart' show kAssessmentColors, colorToHex;
 import '../providers/user_provider.dart';
 import '../widgets/center_toast.dart';
 import '../widgets/floating_line_background.dart';
@@ -122,6 +126,7 @@ class _CoursesScreenState extends State<CoursesScreen>
         'location': existing?.location ?? '',
         'startTime': existing?.startTime ?? '',
         'endTime': existing?.endTime ?? '',
+        'colorHex': course.colorHex ?? '',
       },
       onSubmit: (_) async {
         if (!mounted) return;
@@ -686,10 +691,22 @@ class _CourseListCard extends StatelessWidget {
   final VoidCallback onDelete;
   final VoidCallback onSubscribe;
 
+  Color _colorFromHex(String? hex) {
+    if (hex == null || hex.isEmpty) return AppColors.primary;
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF\$hex';
+    try {
+      return Color(int.parse(hex, radix: 16));
+    } catch (_) {
+      return AppColors.primary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final description = course.description?.trim();
     final hasImage = course.courseImg != null && course.courseImg!.isNotEmpty;
+    final themeColor = _colorFromHex(course.colorHex);
 
     return Material(
       color: Colors.white,
@@ -700,7 +717,7 @@ class _CourseListCard extends StatelessWidget {
         child: Container(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: AppColors.primary.withOpacity(0.08)),
+            border: Border.all(color: themeColor.withOpacity(0.08)),
           ),
           child: ClipRRect(
             borderRadius: BorderRadius.circular(8),
@@ -716,11 +733,11 @@ class _CourseListCard extends StatelessWidget {
                       course.courseImg!,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Container(
-                        color: AppColors.primary.withOpacity(0.08),
-                        child: const Center(
+                        color: themeColor.withOpacity(0.08),
+                        child: Center(
                           child: Icon(
                             Icons.image_not_supported_outlined,
-                            color: AppColors.primary,
+                            color: themeColor,
                             size: 32,
                           ),
                         ),
@@ -728,10 +745,10 @@ class _CourseListCard extends StatelessWidget {
                       loadingBuilder: (_, child, loadingProgress) {
                         if (loadingProgress == null) return child;
                         return Container(
-                          color: AppColors.primary.withOpacity(0.06),
-                          child: const Center(
+                          color: themeColor.withOpacity(0.06),
+                          child: Center(
                             child: CircularProgressIndicator(
-                              color: AppColors.primary,
+                              color: themeColor,
                               strokeWidth: 2,
                             ),
                           ),
@@ -753,12 +770,12 @@ class _CourseListCard extends StatelessWidget {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: AppColors.primary.withOpacity(0.1),
+                              color: themeColor.withOpacity(0.1),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Icon(
+                            child: Icon(
                               Icons.menu_book_outlined,
-                              color: AppColors.primary,
+                              color: themeColor,
                               size: 28,
                             ),
                           ),
@@ -847,14 +864,34 @@ class _CourseListCard extends StatelessWidget {
                       ),
                       if (description != null && description.isNotEmpty) ...[
                         const SizedBox(height: 12),
-                        Text(
-                          description,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Color(0xFF4A5568),
-                            fontSize: 14,
-                            height: 1.35,
+                        MarkdownBody(
+                          data: description,
+                          styleSheet: MarkdownStyleSheet(
+                            p: const TextStyle(
+                              color: Color(0xFF4A5568),
+                              fontSize: 14,
+                              height: 1.35,
+                            ),
+                            h1: TextStyle(
+                              color: themeColor,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                            ),
+                            h2: TextStyle(
+                              color: themeColor,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            strong: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                            ),
+                            em: const TextStyle(
+                              fontStyle: FontStyle.italic,
+                            ),
+                            listBullet: TextStyle(
+                              color: themeColor,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
                       ],
@@ -892,10 +929,10 @@ class _CourseListCard extends StatelessWidget {
                               course.isSubscribed ? 'Subscribed' : 'Subscribe',
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.primary,
-                              disabledBackgroundColor: const Color(0xFFE8F1EA),
+                              backgroundColor: themeColor,
+                              disabledBackgroundColor: themeColor.withOpacity(0.1),
                               foregroundColor: Colors.white,
-                              disabledForegroundColor: AppColors.primary,
+                              disabledForegroundColor: themeColor,
                               elevation: 0,
                               minimumSize: const Size.fromHeight(44),
                               shape: RoundedRectangleBorder(
@@ -962,6 +999,7 @@ class _CourseEditorSheet extends StatefulWidget {
     required String courseName,
     required String courseCode,
     required String? description,
+    required String colorHex,
   })
   onSubmit;
 
@@ -973,6 +1011,7 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
   late final TextEditingController _nameController;
   late final TextEditingController _codeController;
   late final TextEditingController _descriptionController;
+  Color _selectedColor = kAssessmentColors.first;
   bool _isSubmitting = false;
 
   @override
@@ -987,6 +1026,22 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
     _descriptionController = TextEditingController(
       text: widget.course?.description ?? '',
     );
+    if (widget.course?.colorHex != null) {
+      final color = _colorFromHex(widget.course!.colorHex!);
+      if (color != null) {
+        _selectedColor = color;
+      }
+    }
+  }
+
+  Color? _colorFromHex(String hexColor) {
+    hexColor = hexColor.replaceAll('#', '');
+    if (hexColor.length == 6) hexColor = 'FF\$hexColor';
+    try {
+      return Color(int.parse(hexColor, radix: 16));
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
@@ -1019,6 +1074,7 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
         courseName: name,
         courseCode: code,
         description: description.isEmpty ? null : description,
+        colorHex: colorToHex(_selectedColor),
       );
       if (!mounted) return;
       Navigator.pop(context);
@@ -1106,6 +1162,54 @@ class _CourseEditorSheetState extends State<_CourseEditorSheet> {
                 ),
               ),
               const SizedBox(height: 16),
+              const Text(
+                'Choose Color',
+                style: TextStyle(
+                  color: Color(0xFF3A5240),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: kAssessmentColors.map((color) {
+                  final isSelected = _selectedColor == color;
+                  return GestureDetector(
+                    onTap: () => setState(() => _selectedColor = color),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 200),
+                      width: 36,
+                      height: 36,
+                      decoration: BoxDecoration(
+                        color: color,
+                        shape: BoxShape.circle,
+                        border: isSelected
+                            ? Border.all(color: Colors.white, width: 3)
+                            : null,
+                        boxShadow: isSelected
+                            ? [
+                                BoxShadow(
+                                  color: color.withOpacity(0.5),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
+                                ),
+                              ]
+                            : null,
+                      ),
+                      child: isSelected
+                          ? const Icon(
+                              Icons.check_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            )
+                          : null,
+                    ),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton.icon(
@@ -1150,12 +1254,24 @@ class _CourseDetailsSheet extends StatelessWidget {
   final CourseModel course;
   final bool canManage;
 
+  Color _colorFromHex(String? hex) {
+    if (hex == null || hex.isEmpty) return AppColors.primary;
+    hex = hex.replaceAll('#', '');
+    if (hex.length == 6) hex = 'FF\$hex';
+    try {
+      return Color(int.parse(hex, radix: 16));
+    } catch (_) {
+      return AppColors.primary;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     // Adds the device's bottom safe-area inset (home indicator / gesture
     // bar / rounded corners) directly into the sheet's own background so
     // there is no gap showing the page behind it on any phone shape.
     final bottomInset = MediaQuery.of(context).padding.bottom;
+    final themeColor = _colorFromHex(course.colorHex);
 
     return Container(
       width: double.infinity,
@@ -1186,12 +1302,12 @@ class _CourseDetailsSheet extends StatelessWidget {
                 width: 48,
                 height: 48,
                 decoration: BoxDecoration(
-                  color: AppColors.primary.withOpacity(0.1),
+                  color: themeColor.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.auto_stories_outlined,
-                  color: AppColors.primary,
+                  color: themeColor,
                 ),
               ),
               const SizedBox(width: 12),
@@ -1236,10 +1352,10 @@ class _CourseDetailsSheet extends StatelessWidget {
                   if (loadingProgress == null) return child;
                   return Container(
                     height: 160,
-                    color: AppColors.primary.withOpacity(0.06),
-                    child: const Center(
+                    color: themeColor.withOpacity(0.06),
+                    child: Center(
                       child: CircularProgressIndicator(
-                        color: AppColors.primary,
+                        color: themeColor,
                         strokeWidth: 2,
                       ),
                     ),
@@ -1249,6 +1365,48 @@ class _CourseDetailsSheet extends StatelessWidget {
             ),
           if (course.courseImg != null && course.courseImg!.isNotEmpty)
             const SizedBox(height: 22),
+
+          // ── Materials ─────────────────────────────────────────────────
+          if (course.materials.isNotEmpty || canManage) ...[
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Materials',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF1B3B22),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (course.materials.isEmpty)
+              const Padding(
+                padding: EdgeInsets.only(bottom: 12.0),
+                child: Text('No materials uploaded yet.', style: TextStyle(color: Colors.grey)),
+              )
+            else
+              ...course.materials.map((m) => Padding(
+                    padding: const EdgeInsets.only(bottom: 8.0),
+                    child: ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Icon(Icons.picture_as_pdf, color: themeColor),
+                      title: Text(m.name, maxLines: 1, overflow: TextOverflow.ellipsis),
+                      trailing: const Icon(Icons.download_rounded, color: Colors.grey),
+                      onTap: () async {
+                        final uri = Uri.parse(m.url);
+                        if (await canLaunchUrl(uri)) {
+                          await launchUrl(uri);
+                        } else {
+                          CenterToast.show(context, message: 'Could not open material', icon: Icons.error, color: Colors.red);
+                        }
+                      },
+                    ),
+                  )),
+            const SizedBox(height: 12),
+          ],
 
           // ── Teaching side ─────────────────────────────────────────────
           if (canManage) ...[
@@ -1277,7 +1435,10 @@ class _CourseDetailsSheet extends StatelessWidget {
               subtitle: 'Manage assessment for this course',
               onTap: () {
                 Navigator.pop(context);
-                context.push('/assessment');
+                context.push(
+                  '/assessments',
+                  extra: {'courseCode': course.courseCode},
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -1288,7 +1449,10 @@ class _CourseDetailsSheet extends StatelessWidget {
               subtitle: 'Manage grade from this course',
               onTap: () {
                 Navigator.pop(context);
-                context.push('');
+                context.push(
+                  '/grading',
+                  extra: {'courseCode': course.courseCode},
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -1319,7 +1483,10 @@ class _CourseDetailsSheet extends StatelessWidget {
               subtitle: 'View assessment for this course',
               onTap: () {
                 Navigator.pop(context);
-                context.push('/assessment');
+                context.push(
+                  '/assessments',
+                  extra: {'courseCode': course.courseCode},
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -1330,7 +1497,10 @@ class _CourseDetailsSheet extends StatelessWidget {
               subtitle: 'View grade from this course',
               onTap: () {
                 Navigator.pop(context);
-                context.push('');
+                context.push(
+                  '/grading',
+                  extra: {'courseCode': course.courseCode},
+                );
               },
             ),
             const SizedBox(height: 12),
@@ -1410,29 +1580,31 @@ class _StatusPanel extends StatelessWidget {
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: AppColors.primary, size: 38),
-            const SizedBox(height: 10),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: Color(0xFF1B3B22),
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: AppColors.primary, size: 38),
+              const SizedBox(height: 10),
+              Text(
+                title,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Color(0xFF1B3B22),
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: Color(0xFF718096), height: 1.35),
-            ),
-            const SizedBox(height: 14),
-            OutlinedButton(onPressed: onActionTap, child: Text(actionLabel)),
-          ],
+              const SizedBox(height: 6),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: Color(0xFF718096), height: 1.35),
+              ),
+              const SizedBox(height: 14),
+              OutlinedButton(onPressed: onActionTap, child: Text(actionLabel)),
+            ],
+          ),
         ),
       ),
     );

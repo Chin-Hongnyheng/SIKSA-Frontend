@@ -24,7 +24,8 @@ import '../widgets/loading.dart';
 // ═══════════════════════════════════════════════════════════════
 
 class AssessmentsScreen extends StatefulWidget {
-  const AssessmentsScreen({super.key});
+  const AssessmentsScreen({super.key, this.preselectedCourseCode});
+  final String? preselectedCourseCode;
 
   @override
   State<AssessmentsScreen> createState() => _AssessmentsScreenState();
@@ -42,7 +43,11 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     super.initState();
     Future.microtask(() {
       final p = context.read<AssessmentProvider>();
-      p.loadAllAssessments();
+      if (widget.preselectedCourseCode != null) {
+        p.loadAssessments(widget.preselectedCourseCode!);
+      } else {
+        p.loadAllAssessments();
+      }
       p.loadFolders();
     });
   }
@@ -370,7 +375,8 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
   void _showAssessmentDetails(AssessmentModel assessment) {
     final user = context.read<UserProvider>().user;
     final role = user?.role ?? 'Unknown';
-    final canManage = role == 'Teacher' || role == 'Admin';
+    final canManage =
+        role == 'User' || role == 'Admin' || role == 'Teacher';
 
     showModalBottomSheet(
       context: context,
@@ -455,19 +461,24 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     List<AssessmentModel> all,
     AssessmentProvider provider,
   ) {
-    if (_activeFilter == 'all') return all;
+    var filtered = all;
+    if (widget.preselectedCourseCode != null) {
+      filtered = filtered.where((a) => a.courseCode == widget.preselectedCourseCode).toList();
+    }
+    
+    if (_activeFilter == 'all') return filtered;
 
     // Check if it's a type filter (icon key)
     final iconTypes = provider.assessmentIconTypes;
     if (iconTypes.contains(_activeFilter)) {
-      return all.where((a) => a.icon == _activeFilter).toList();
+      return filtered.where((a) => a.icon == _activeFilter).toList();
     }
 
     // Otherwise it's a folder id
     final folder = provider.folders.where((f) => f.id == _activeFilter);
-    if (folder.isEmpty) return all;
+    if (folder.isEmpty) return filtered;
 
-    return all
+    return filtered
         .where(
           (a) =>
               folder.first.containsAssessment(a.courseCode, a.assessmentName),
@@ -483,7 +494,8 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
     final user = context.watch<UserProvider>().user;
     final assessments = assessmentProvider.allAssessments;
     final role = user?.role ?? 'Unknown';
-    final canManage = role == 'User' || role == 'Admin';
+    final canManage =
+        role == 'User' || role == 'Admin' || role == 'Teacher';
 
     final filteredAssessments = _filterAssessments(
       assessments,
@@ -523,7 +535,13 @@ class _AssessmentsScreenState extends State<AssessmentsScreen> {
                       canManage: canManage,
                       isCustomizing: _isCustomizingAssessments,
                       onManageTap: canManage
-                          ? () => context.push('/grading')
+                          ? () => context.push(
+                                '/grading',
+                                extra: {
+                                  if (widget.preselectedCourseCode != null)
+                                    'courseCode': widget.preselectedCourseCode
+                                },
+                              )
                           : null,
                       onCustomizingToggle: canManage
                           ? () {
@@ -1370,10 +1388,8 @@ class _AssessmentCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = assessment.assessmentName.trim();
     final courseCode = assessment.courseCode.trim();
-    final createdAt = DateTime.tryParse(assessment.createdAt ?? '');
-    final dateLabel = createdAt == null
-        ? '--'
-        : DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
+    final createdAt = assessment.createdAt;
+    final dateLabel = DateFormat('dd MMM yyyy, hh:mm a').format(createdAt.toLocal());
 
     final guide = assessment.guide?.trim() ?? '';
     final accentColor = assessmentColorFromHex(assessment.color);
@@ -1439,17 +1455,6 @@ class _AssessmentCard extends StatelessWidget {
                                 ),
                               ),
                               const SizedBox(height: 5),
-                              Text(
-                                courseCode.isNotEmpty
-                                    ? 'Course: $courseCode'
-                                    : 'Course not set',
-                                style: const TextStyle(
-                                  color: Color(0xFF607064),
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 13.5,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
                               Text(
                                 'Created: $dateLabel',
                                 style: const TextStyle(

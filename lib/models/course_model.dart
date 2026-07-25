@@ -18,6 +18,26 @@ class CourseSubscriberModel {
   }
 }
 
+class CourseMaterialModel {
+  final String name;
+  final String url;
+  final String uploadedAt;
+
+  CourseMaterialModel({
+    required this.name,
+    required this.url,
+    required this.uploadedAt,
+  });
+
+  factory CourseMaterialModel.fromMap(Map<String, dynamic> map) {
+    return CourseMaterialModel(
+      name: map['name']?.toString() ?? 'Document',
+      url: map['url']?.toString() ?? '',
+      uploadedAt: map['uploaded_at']?.toString() ?? '',
+    );
+  }
+}
+
 class CourseModel {
   final String courseName;
   final String courseCode;
@@ -28,6 +48,8 @@ class CourseModel {
   final bool isSubscribed;
   final List<CourseSubscriberModel> subscribers;
   final String? courseImg;
+  final String? colorHex;
+  final List<CourseMaterialModel> materials;
 
   CourseModel({
     required this.courseCode,
@@ -39,10 +61,13 @@ class CourseModel {
     this.isSubscribed = false,
     this.subscribers = const [],
     this.courseImg,
+    this.colorHex,
+    this.materials = const [],
   });
 
   factory CourseModel.fromMap(Map<String, dynamic> map) {
     final rawSubscribers = map['subscribers'];
+    final rawMaterials = map['materials'];
 
     return CourseModel(
       courseCode: map['courseCode']?.toString() ?? '',
@@ -54,11 +79,21 @@ class CourseModel {
           int.tryParse(map['subscriberCount']?.toString() ?? '') ?? 0,
       isSubscribed: map['isSubscribed'] == true,
       courseImg: map['courseImg']?.toString(),
+      colorHex: map['colorHex']?.toString(),
       subscribers: rawSubscribers is List
           ? rawSubscribers
                 .map(
                   (subscriber) => CourseSubscriberModel.fromMap(
                     Map<String, dynamic>.from(subscriber as Map),
+                  ),
+                )
+                .toList()
+          : const [],
+      materials: rawMaterials is List
+          ? rawMaterials
+                .map(
+                  (m) => CourseMaterialModel.fromMap(
+                    Map<String, dynamic>.from(m as Map),
                   ),
                 )
                 .toList()
@@ -76,6 +111,8 @@ class CourseModel {
     bool? isSubscribed,
     List<CourseSubscriberModel>? subscribers,
     String? courseImg,
+    String? colorHex,
+    List<CourseMaterialModel>? materials,
   }) {
     return CourseModel(
       courseCode: courseCode ?? this.courseCode,
@@ -87,6 +124,8 @@ class CourseModel {
       isSubscribed: isSubscribed ?? this.isSubscribed,
       subscribers: subscribers ?? this.subscribers,
       courseImg: courseImg ?? this.courseImg,
+      colorHex: colorHex ?? this.colorHex,
+      materials: materials ?? this.materials,
     );
   }
 }
