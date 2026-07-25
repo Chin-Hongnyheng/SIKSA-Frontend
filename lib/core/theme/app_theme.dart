@@ -1,12 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
-import 'app_text_styles.dart';
-import 'app_gradient.dart';
 
 class AppTheme {
   static ThemeData lightTheme = ThemeData(
     useMaterial3: true,
-    fontFamily: 'Nunito',
+    textTheme: GoogleFonts.nunitoTextTheme(),
 
     // Base colors
     primaryColor: AppColors.primary,
@@ -18,7 +17,7 @@ class AppTheme {
       primary: AppColors.primary,
       onPrimary: Colors.white,
       secondary: AppColors.secondary,
-      onSecondary: Colors.white,
+      onSecondary: Color.fromARGB(255, 73, 61, 61),
       error: AppColors.error,
       onError: Colors.white,
       surface: Colors.white,
