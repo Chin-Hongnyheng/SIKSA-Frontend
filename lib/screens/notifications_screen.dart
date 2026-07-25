@@ -1,10 +1,40 @@
-// lib/screens/notifications_screen.dart
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 import '../widgets/notification_card.dart';
+import '../providers/notification_provider.dart';
 
-class NotificationsScreen extends StatelessWidget {
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<NotificationProvider>().fetchNotifications();
+    });
+  }
+
+  String _formatTime(DateTime? time) {
+    if (time == null) return 'Just now';
+    final now = DateTime.now();
+    final difference = now.difference(time);
+    
+    if (difference.inMinutes < 60) {
+      return '${difference.inMinutes} minutes ago';
+    } else if (difference.inHours < 24) {
+      return '${difference.inHours} hours ago';
+    } else if (difference.inDays < 2) {
+      return 'Yesterday, ${DateFormat.jm().format(time)}';
+    }
+    return DateFormat('MMM d, yyyy h:mm a').format(time);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -12,37 +42,6 @@ class NotificationsScreen extends StatelessWidget {
     final Color primaryGreen = const Color(0xFF388E3C);
     final Color backgroundGray = const Color(0xFFF9F9F9);
     final Color sectionHeaderGray = const Color(0xFF757575);
-
-    // Mock Data based on the image
-    final List<Map<String, dynamic>> newNotifications = [
-      {
-        'title': 'Quiz have been created',
-        'message': 'You can do your quiz now. Please be on time.',
-        'time': '1 hours ago',
-        'isUnread': true,
-      },
-      {
-        'title': 'Scores published',
-        'message': 'You can check and see your scores for now.',
-        'time': '2 hours ago',
-        'isUnread': true,
-      },
-    ];
-
-    final List<Map<String, dynamic>> earlierNotifications = [
-      {
-        'title': 'Midterm exam scores',
-        'message': 'Check for your exam scores now.',
-        'time': 'Yesterday, 5:00 PM',
-        'isUnread': false,
-      },
-      {
-        'title': 'Scores published',
-        'message': 'You can check and see your scores for now.',
-        'time': 'Today, 10:00 AM',
-        'isUnread': false,
-      },
-    ];
 
     return Scaffold(
       backgroundColor: backgroundGray,
@@ -67,8 +66,7 @@ class NotificationsScreen extends StatelessWidget {
                       color: Colors.white,
                     ),
                     onPressed: () {
-                      // Navigate back
-                      context.pop(context);
+                      context.pop();
                     },
                   ),
                   const Expanded(
@@ -90,73 +88,80 @@ class NotificationsScreen extends StatelessWidget {
 
             // Scrollable Content
             Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Mark all read action
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: GestureDetector(
-                        onTap: () {
-                          // Handle mark all read action
-                        },
-                        child: Text(
-                          'Mark all read',
+              child: Consumer<NotificationProvider>(
+                builder: (context, provider, child) {
+                  final messages = provider.messages;
+
+                  if (provider.isLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+
+                  if (messages.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        'No notifications yet.',
+                        style: TextStyle(
+                          fontSize: 16,
+                          color: Colors.black54,
+                        ),
+                      ),
+                    );
+                  }
+
+                  return SingleChildScrollView(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        // Mark all read action
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: GestureDetector(
+                            onTap: () {
+                              provider.clearUnread();
+                            },
+                            child: Text(
+                              'Mark all read',
+                              style: TextStyle(
+                                color: primaryGreen,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+
+                        Text(
+                          'Recent',
                           style: TextStyle(
-                            color: primaryGreen,
-                            fontSize: 18,
+                            fontSize: 20,
+                            color: sectionHeaderGray,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
+                        const SizedBox(height: 16),
 
-                    // "New" Section
-                    Text(
-                      'New',
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: sectionHeaderGray,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    ...newNotifications.map(
-                      (notif) => NotificationCard(
-                        title: notif['title'],
-                        message: notif['message'],
-                        time: notif['time'],
-                        isUnread: notif['isUnread'],
-                      ),
-                    ),
+                        ...messages.map((msg) {
+                          return GestureDetector(
+                            onTap: () {
+                              if (msg.isUnread) provider.markAsRead(msg.id);
+                              // Can also route based on msg.data
+                            },
+                            child: NotificationCard(
+                              title: msg.title,
+                              message: msg.body,
+                              time: _formatTime(msg.createdAt),
+                              isUnread: msg.isUnread,
+                            ),
+                          );
+                        }),
 
-                    const SizedBox(height: 16),
-
-                    // "Earlier" Section
-                    Text(
-                      'Earlier',
-                      style: TextStyle(
-                        fontSize: 20,
-                        color: sectionHeaderGray,
-                        fontWeight: FontWeight.w500,
-                      ),
+                        const SizedBox(height: 24),
+                      ],
                     ),
-                    const SizedBox(height: 16),
-                    ...earlierNotifications.map(
-                      (notif) => NotificationCard(
-                        title: notif['title'],
-                        message: notif['message'],
-                        time: notif['time'],
-                        isUnread: notif['isUnread'],
-                      ),
-                    ),
-
-                    const SizedBox(height: 24),
-                  ],
-                ),
+                  );
+                },
               ),
             ),
           ],
@@ -165,3 +170,4 @@ class NotificationsScreen extends StatelessWidget {
     );
   }
 }
+

@@ -7,8 +7,19 @@ import '../providers/auth_provider.dart';
 import '../config/router.dart'; // your GoRouter instance
 import 'dart:convert';
 
+import '../models/notification_model.dart';
+import '../core/utils/api_helper.dart';
+
 class NotificationService {
   static final _fln = FlutterLocalNotificationsPlugin();
+
+  static GraphQLClient _authClient() {
+    final Link authLink = HttpLink(
+      ApiHelper.resolveUrl(dotenv.env['GRAPHQL_URL']!),
+      defaultHeaders: {"Authorization": "Bearer ${AuthProvider.accessToken}"},
+    );
+    return GraphQLClient(link: authLink, cache: GraphQLCache());
+  }
 
   static const String _updateFcmTokenMutation = r'''
     mutation UpdateProfile($input: UpdateUserInput!) {
@@ -36,7 +47,7 @@ class NotificationService {
     const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     const iosInit = DarwinInitializationSettings();
     await _fln.initialize(
-      const InitializationSettings(android: androidInit, iOS: iosInit),
+      settings: const InitializationSettings(android: androidInit, iOS: iosInit),
       onDidReceiveNotificationResponse: (response) {
         if (response.payload == null) return;
         try {
@@ -64,10 +75,10 @@ class NotificationService {
     FirebaseMessaging.onMessage.listen((message) {
       notifProvider.addMessage(message);
       _fln.show(
-        message.hashCode,
-        message.notification?.title,
-        message.notification?.body,
-        NotificationDetails(
+        id: message.hashCode,
+        title: message.notification?.title,
+        body: message.notification?.body,
+        notificationDetails: NotificationDetails(
           android: AndroidNotificationDetails(
             'default_channel',
             'Default',
@@ -136,5 +147,72 @@ class NotificationService {
     } catch (_) {
       // retry later / log
     }
+  }
+
+  static const String _getMyNotificationsQuery = r'''
+    query GetMyNotifications {
+      getMyNotifications {
+        id
+        title
+        body
+        data
+        isUnread
+        createdAt
+      }
+    }
+  ''';
+
+  static const String _markNotificationReadMutation = r'''
+    mutation MarkNotificationRead($id: String!) {
+      markNotificationRead(id: $id) {
+        success
+      }
+    }
+  ''';
+
+  static const String _markAllNotificationsReadMutation = r'''
+    mutation MarkAllNotificationsRead {
+      markAllNotificationsRead {
+        success
+      }
+    }
+  ''';
+
+  static Future<List<NotificationModel>> fetchNotifications() async {
+    final client = _authClient();
+    final result = await client.query(
+      QueryOptions(
+        document: gql(_getMyNotificationsQuery),
+        fetchPolicy: FetchPolicy.networkOnly,
+      ),
+    );
+
+    if (result.hasException) {
+      throw Exception(result.exception.toString());
+    }
+
+    final data = result.data?['getMyNotifications'] as List?;
+    if (data == null) return [];
+
+    return data.map((json) => NotificationModel.fromJson(json)).toList();
+  }
+
+  static Future<void> markNotificationRead(String id) async {
+    final client = _authClient();
+    await client.mutate(
+      MutationOptions(
+        document: gql(_markNotificationReadMutation),
+        variables: {'id': id},
+      ),
+    );
+  }
+
+  static Future<void> markAllNotificationsRead() async {
+    final client = _authClient();
+    await client.mutate(
+      MutationOptions(
+        document: gql(_markAllNotificationsReadMutation),
+      ),
+    );
   }
 }

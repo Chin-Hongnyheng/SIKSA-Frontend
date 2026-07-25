@@ -25,6 +25,7 @@ import '../screens/Attendance/attendance_screen.dart';
 import '../screens/Attendance/attendance_session_report_page.dart';
 import '../screens/course_qr_screen.dart';
 import '../screens/Attendance/student_mark_attendance_page.dart';
+import '../screens/notifications_screen.dart';
 
 
 String getUserField(dynamic user, List<String> fields, String fallback) {
@@ -101,6 +102,10 @@ final GoRouter router = GoRouter(
       builder: (context, state) => const DashBoardScreen(),
     ),
     GoRoute(path: '/profile', builder: (context, state) => ProfileScreen()),
+    GoRoute(
+      path: '/notifications',
+      builder: (context, state) => const NotificationsScreen(),
+    ),
     GoRoute(path: '/schedule', builder: (context, state) => ScheduleScreen()),
     GoRoute(
       path: '/assessments',

@@ -12,6 +12,7 @@ import '../providers/course_provider.dart';
 import '../providers/schedule_provider.dart';
 import '../providers/assessment_provider.dart';
 import '../providers/attendance_provider.dart';
+import '../providers/notification_provider.dart';
 import '../widgets/dashboard_card.dart';
 import '../widgets/quick_access.dart';
 import '../widgets/recommendation.dart';
@@ -217,13 +218,22 @@ class _DashBoardScreenState extends State<DashBoardScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.end,
                       children: [
-                        IconButton(
-                          onPressed: () {},
-                          icon: const Icon(
-                            Icons.notifications_outlined,
-                            color: Colors.white,
-                            size: 28,
-                          ),
+                        Consumer<NotificationProvider>(
+                          builder: (context, notificationProvider, _) {
+                            return IconButton(
+                              onPressed: () => context.push('/notifications'),
+                              icon: Badge(
+                                isLabelVisible: notificationProvider.unreadCount > 0,
+                                label: Text('${notificationProvider.unreadCount}'),
+                                backgroundColor: Colors.red,
+                                child: const Icon(
+                                  Icons.notifications_outlined,
+                                  color: Colors.white,
+                                  size: 28,
+                                ),
+                              ),
+                            );
+                          },
                         ),
                         IconButton(
                           onPressed: () => context.push('/courses/qr'),
